@@ -58,8 +58,14 @@ pub fn open_panel<R: Runtime>(app: &AppHandle<R>) {
     };
 
     // Built hidden so the positioner can place it before it is ever shown (avoids a
-    // flash at the window's default spawn position).
-    let _ = window.move_window_constrained(Position::TrayCenter);
+    // flash at the window's default spawn position). The tray position is known only
+    // after a tray event; without one (opened by relaunching the app) it is centered.
+    if window
+        .move_window_constrained(Position::TrayCenter)
+        .is_err()
+    {
+        let _ = window.center();
+    }
     let _ = window.show();
     let _ = window.set_focus();
 
@@ -139,6 +145,7 @@ pub fn fit_panel<R: Runtime>(window: &tauri::WebviewWindow<R>, height: f64) {
     }
     let clamped = height.clamp(PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT);
     let _ = window.set_size(LogicalSize::new(PANEL_WIDTH, clamped));
+    // Keeps it at the tray icon; with no known tray position it stays where it is.
     let _ = window.move_window_constrained(Position::TrayCenter);
 }
 

@@ -50,6 +50,8 @@ After these, `pnpm lint`, `pnpm test`, and `sh scripts/ui-check.sh` must still p
   language and are rebuilt by `apply_language`.
 - Windows: created when opened, destroyed when closed (docs/impl/ipc.md > Windows). The panel
   is placed at the tray icon with the positioner plugin and closes when it loses focus.
+  Opening the app again while it runs (macOS `RunEvent::Reopen`) opens the panel, centered
+  since there is no tray position: a crowded menu bar can leave the tray icon no room.
 - Settings: JSON in the app config dir; defaults in docs/impl/ipc.md. Effective language:
   `sys-locale` starts with `ja` -> ja, else en (unless set explicitly).
 - Shortcuts: register the three accelerators from settings at startup and after every
