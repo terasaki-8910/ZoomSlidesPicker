@@ -22,3 +22,7 @@ src-tauri/gen/schemas/
 playwright-report/
 test-results/
 .playwright-mcp/
+# outputs of the fixture generator and the reference detector (regenerated on demand)
+samples/fixture/out/
+samples/proto/out_r2/
+samples/proto/report_r2.json
