@@ -23,7 +23,17 @@ impl WindowSource {
 impl FrameSource for WindowSource {
     fn next_frame(&mut self, t: f64) -> Result<Option<(f64, RgbaImage)>, SourceError> {
         match self.capture.capture() {
-            Ok(frame) => Ok(Some((t, crop(&frame, &self.region)))),
+            Ok(frame) => {
+                // The whole window needs no copy.
+                let (w, h) = frame.dimensions();
+                let rect = self.region.to_pixels(w, h);
+                let frame = if (rect.x, rect.y, rect.w, rect.h) == (0, 0, w, h) {
+                    frame
+                } else {
+                    crop(&frame, &self.region)
+                };
+                Ok(Some((t, frame)))
+            }
             Err(e @ (CaptureError::NotFound | CaptureError::Minimized)) => {
                 Err(SourceError::Lost(e.to_string()))
             }

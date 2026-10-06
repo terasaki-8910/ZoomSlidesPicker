@@ -68,6 +68,18 @@ describe("Region", () => {
     expect(ipc.startSession).toHaveBeenCalledWith(1, { x: 0, y: 0, w: 1, h: 1 });
   });
 
+  it("shows a start error in place of the hint and keeps the window open", async () => {
+    setup();
+    vi.mocked(ipc.startSession).mockRejectedValue("すでにキャプチャ中です。");
+    render(<Region />);
+    await screen.findByAltText("Zoom Meeting の静止画");
+
+    screen.getByRole("button", { name: "開始" }).click();
+
+    expect(await screen.findByText("すでにキャプチャ中です。")).toBeInTheDocument();
+    expect(ipc.cancelRegion).not.toHaveBeenCalled();
+  });
+
   it("has no axe violations (C5)", async () => {
     setup();
     const { container } = render(<Region />);

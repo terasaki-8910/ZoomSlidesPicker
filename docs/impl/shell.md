@@ -23,9 +23,11 @@ docs/recipes/tauri-desktop-app.md (gotchas 3, 4, 7 apply).
   only. Rust calls the plugins itself; the webview gets no plugin permissions.
 - Icons: a script `scripts/make-icons.py` (Python, Pillow; the repo's `.venv` has it) draws
   a plain monochrome app icon source (1024 x 1024: a slide rectangle, no text) and three tray
-  template images (stopped: outline, running: filled, paused: outline with two bars; black on
-  transparent, 32 x 32 and 64 x 64). Generate the bundle icons with `pnpm tauri icon`.
-  Commit the outputs.
+  glyphs (stopped: outline, running: filled, paused: outline with two bars): macOS template
+  images (black on transparent, 32 x 32 and 64 x 64) and, for Windows and Linux, which have
+  no template images and may have a dark or light taskbar, the same glyphs in white on an
+  accent badge (32 x 32). Generate the bundle icons with `pnpm tauri icon`. Commit the
+  outputs.
 
 ## Frontend touch points
 
@@ -68,13 +70,29 @@ After these, `pnpm lint`, `pnpm test`, and `sh scripts/ui-check.sh` must still p
 - Quit: stop a running session first (so the PDF is written), then exit.
 - Errors returned to the UI are short strings in the effective language.
 
-## Test hook (for ACCEPTANCE D1 and D3 only)
+## Threads
+
+- Commands without `async` run on the main thread, as do tray, menu, and global-shortcut
+  handlers. Tray and menu calls made from any other thread block until the main thread has
+  run them. So no thread may hold the shell state lock while making such a call: it would
+  deadlock against the main thread waiting for the same lock. `ui::sync` (src-tauri/src/ui.rs)
+  is the one place that emits `app-state` and updates the tray; it runs on the main thread
+  (posted there without waiting) and must be called without the lock held.
+- The session thread (the `Notify` callback) never waits for the main thread, so the main
+  thread may join a session thread.
+- `async` commands: those that block (dialogs, the permission prompt, captures, writing a
+  PDF) and `open_settings` (creating a window in a synchronous command deadlocks on
+  Windows, WebView2).
+
+## Test hook (for ACCEPTANCE D1 and D3, and for looking at the real windows)
 
 When the environment variable `ZSP_AUTOSTART_TITLE` is set, the app starts a session at launch
 on the first window whose title contains it (whole window). With `ZSP_AUTOSTART_SECONDS=n`
 it stops after n seconds and quits. `ZSP_SAVE_ROOT=<dir>` overrides the save root (so tests
-never write into the user's Pictures folder). Nothing else changes; document these in
-README.md under development notes.
+never write into the user's Pictures folder). `ZSP_OPEN_WINDOW=panel|settings|region` opens
+that window at launch (`region` takes the `ZSP_AUTOSTART_TITLE` window and starts no
+session), since the tray icon cannot be clicked from a script. Nothing else changes;
+document these in README.md under development notes.
 
 ## Checks
 

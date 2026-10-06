@@ -1,5 +1,12 @@
-//! Test hook for ACCEPTANCE D1/D3 only (docs/impl/shell.md > Test hook). A no-op unless
-//! `ZSP_AUTOSTART_TITLE` is set.
+//! Test hooks for the real-machine checks: ACCEPTANCE D1/D3, and looking at the real
+//! windows (docs/impl/shell.md > Test hook). No-ops unless the variables are set.
+//!
+//! - `ZSP_AUTOSTART_TITLE=<substr>`: starts a session on the first window whose title
+//!   contains it (whole window). With `ZSP_OPEN_WINDOW=region`, opens the region window
+//!   for that window instead.
+//! - `ZSP_AUTOSTART_SECONDS=<n>`: quits after n seconds (stopping the session first).
+//! - `ZSP_SAVE_ROOT=<dir>`: the save root for this run only (not written to the settings).
+//! - `ZSP_OPEN_WINDOW=panel|settings|region`: opens that window at launch.
 
 use std::env;
 use std::thread;
@@ -9,6 +16,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::ipc_types::RegionSel;
 use crate::state::SharedShell;
+use crate::windows;
 
 const RETRY_ATTEMPTS: u32 = 10;
 const RETRY_DELAY: Duration = Duration::from_millis(300);
@@ -16,13 +24,15 @@ const RETRY_DELAY: Duration = Duration::from_millis(300);
 /// Called once from `setup()`; does its work on another thread (finding the window may
 /// take a few seconds of retries).
 pub fn spawn(app: AppHandle) {
-    let Ok(title_substr) = env::var("ZSP_AUTOSTART_TITLE") else {
+    let title = env::var("ZSP_AUTOSTART_TITLE").ok();
+    let open = env::var("ZSP_OPEN_WINDOW").ok();
+    if title.is_none() && open.is_none() {
         return;
-    };
-    thread::spawn(move || run(&app, &title_substr));
+    }
+    thread::spawn(move || run(&app, title.as_deref(), open.as_deref()));
 }
 
-fn run(app: &AppHandle, title_substr: &str) {
+fn run(app: &AppHandle, title: Option<&str>, open: Option<&str>) {
     if let Ok(root) = env::var("ZSP_SAVE_ROOT") {
         app.state::<SharedShell>()
             .lock()
@@ -31,23 +41,36 @@ fn run(app: &AppHandle, title_substr: &str) {
             .save_root = root;
     }
 
-    let Some(window_id) = find_window(title_substr) else {
-        eprintln!(
-            "ZSP_AUTOSTART_TITLE={title_substr:?}: no matching window found after {RETRY_ATTEMPTS} attempts"
-        );
-        return;
-    };
+    if let Some(title) = title {
+        let Some(window_id) = find_window(title) else {
+            eprintln!(
+                "ZSP_AUTOSTART_TITLE={title:?}: no matching window found after {RETRY_ATTEMPTS} attempts"
+            );
+            return;
+        };
+        if open == Some("region") {
+            if let Err(e) = crate::capture_cmds::begin_region(app, window_id) {
+                eprintln!("ZSP_OPEN_WINDOW=region: {e}");
+            }
+        } else {
+            // Whole window, per docs/impl/shell.md > Test hook.
+            let full = RegionSel {
+                x: 0.0,
+                y: 0.0,
+                w: 1.0,
+                h: 1.0,
+            };
+            if let Err(e) = crate::session_start::start(app, window_id, full) {
+                eprintln!("ZSP_AUTOSTART_TITLE: failed to start a session: {e}");
+                return;
+            }
+        }
+    }
 
-    // Whole window, per docs/impl/shell.md > Test hook.
-    let full = RegionSel {
-        x: 0.0,
-        y: 0.0,
-        w: 1.0,
-        h: 1.0,
-    };
-    if let Err(e) = crate::session_start::start(app, window_id, full) {
-        eprintln!("ZSP_AUTOSTART_TITLE: failed to start a session: {e}");
-        return;
+    match open {
+        Some("panel") => windows::open_panel(app),
+        Some("settings") => windows::open_settings(app),
+        _ => {}
     }
 
     let seconds = env::var("ZSP_AUTOSTART_SECONDS")

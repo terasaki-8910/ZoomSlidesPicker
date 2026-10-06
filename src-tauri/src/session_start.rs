@@ -99,6 +99,7 @@ pub fn start<R: Runtime>(
         thumb: None,
         video_total_frames: None,
     });
+    shell.pending_region = None; // the snapshot (a few MB) is no longer needed
     drop(shell);
 
     windows::close_region(app);

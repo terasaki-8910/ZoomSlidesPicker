@@ -104,11 +104,11 @@ returned as a string message (in the effective language) and shown by the UI as 
 | `list_windows` | | `WindowEntry[]` | Capturable windows (zsp-capture `list_windows`), with thumbnails. |
 | `begin_region` | `windowId: number` | | Captures a snapshot of the window, closes the panel, opens the region window. |
 | `get_region_snapshot` | | `Snapshot` | The snapshot taken by `begin_region`. |
-| `start_session` | `windowId: number, region: RegionSel` | | Validates the region, closes the region window, starts capturing, sends the start notification. Error if a session is already running or permission is missing. |
+| `start_session` | `windowId: number, region: RegionSel` | | Validates the region, starts capturing, closes the region window, sends the start notification. Error if a session is already running, permission is missing, or the window or save folder is unusable; the region window then stays open to show it. |
 | `cancel_region` | | | Closes the region window. |
 | `pause_session`, `resume_session`, `save_now`, `undo_last`, `stop_session` | | | Session controls; no-ops when they do not apply. `stop_session` writes the PDF and sends the stop notification. |
 | `open_folder` | | | Opens the current session folder, else the last session folder. |
-| `rebuild_pdf` | | `number` | Rebuilds the last session's PDF (zsp-output `rebuild_pdf`); returns the page count. Error when there is no last session or no images. |
+| `rebuild_pdf` | | `number` | Rebuilds the last session's PDF (zsp-output `rebuild_pdf`); returns the page count, which also becomes `lastSession.count`. Error when there is no last session or no images. |
 | `extract_video` | | | Native file dialog (mp4, mov, m4v), then processes the video like a session (full frame, video time); progress in `AppState.videoProgress`. Error when ffmpeg is not on PATH. |
 | `request_permission` | | `boolean` | macOS: asks for Screen Recording permission (system prompt once); returns whether granted now. |
 | `open_permission_settings` | | | macOS: opens the Screen Recording page of System Settings. |

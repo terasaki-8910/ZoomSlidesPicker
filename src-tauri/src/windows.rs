@@ -84,7 +84,7 @@ fn open_region<R: Runtime>(app: &AppHandle<R>) {
     if app.get_webview_window(REGION_LABEL).is_some() {
         return;
     }
-    let _ = WebviewWindowBuilder::new(
+    let Ok(window) = WebviewWindowBuilder::new(
         app,
         REGION_LABEL,
         WebviewUrl::App("index.html#/region".into()),
@@ -93,7 +93,17 @@ fn open_region<R: Runtime>(app: &AppHandle<R>) {
     .inner_size(1100.0, 760.0)
     .resizable(true)
     .center()
-    .build();
+    .build() else {
+        return;
+    };
+
+    // Closed by its title bar button rather than Cancel: drop the snapshot too.
+    let app = app.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::Destroyed = event {
+            app.state::<SharedShell>().lock().unwrap().pending_region = None;
+        }
+    });
 }
 
 /// Closes the region window (docs/impl/ipc.md > cancel_region, start_session).
