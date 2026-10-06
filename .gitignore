@@ -26,3 +26,6 @@ test-results/
 samples/fixture/out/
 samples/proto/out_r2/
 samples/proto/report_r2.json
+
+# per-feature worktrees used for parallel builds
+.worktrees/

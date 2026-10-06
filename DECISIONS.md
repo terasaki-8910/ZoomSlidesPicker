@@ -67,3 +67,15 @@
 
 - R2-3 の説明で「停止の通知から（保存先を）開ける」と書いたが、作れない。Tauri v2 の通知の操作（Actions）はモバイルだけで、デスクトップでは通知を押しても保存先を開けない。保存先は、パネルと常駐アイコンのメニューから開く。SPEC にそう書いた。
 - R2-1 と R2-3 の答えを SPEC に反映した（シートで予告したとおり）。合わせて、ACCEPTANCE に B9（PDF を作り直す）、C8（直前のセッションの操作）、C9（常駐型）を足し、design_brief の文言の表に「保存先を開く」「PDF を作り直す」「設定…」「終了」を足した。これらはラウンド 2 で GO の出た内容に、R2-1 と R2-3 の答えを当てはめたもので、新しい判断は含まない。
+
+## 2026-10-06 進め方の変更（ユーザーの指示）
+
+ユーザーの言葉:
+> pipelinetamplateに沿わずもう実装まで全て一気通貫で進めてください
+> グローバルもpipelineを削除しました
+> 簡単なタスクとかはsonnetでやってくれると節約になるので嬉しい
+
+- pipeline の仕組み（`scripts/run.sh`、`prompts/`、`pipeline.yaml`、`Makefile`、`scripts/gates.sh`、テンプレートの README）を削除した。CLAUDE.md を claude-template（会話型）の形に合わせた。確認は `sh scripts/check.sh` でまとめて行う。
+- 実装は Sonnet のサブエージェントに任せる。設計、テスト（ACCEPTANCE の判定）、取り込む前の確認は Opus が行う。
+- Claude の解釈（ユーザーの決定ではない）: UI の方向の承認（デザイントークン）は、止まらずに design_brief の範囲で Claude が決め、最後の受け入れで画面を見せて確かめてもらう。変更はそこで受ける。
+- `state/TOOLING.md` と `state/init-tools.sh`（R2-7）は、ユーザーが実行するまでそのまま。
