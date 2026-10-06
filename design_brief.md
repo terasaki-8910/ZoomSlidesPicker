@@ -47,6 +47,10 @@
 | 窓を選ぶ画面の見出し | 授業の窓を選ぶ | Choose the lecture window |
 | 範囲を選ぶ画面の案内 | スライドの部分を囲んで、Enter で決定（Esc で取り消し） | Drag around the slide, then press Enter (Esc to cancel) |
 | mp4 のメニュー | 動画ファイルから抽出… | Extract from video file… |
+| 保存先を開く（R2-3） | 保存先を開く | Open save folder |
+| PDF を作り直す（R2-3） | PDF を作り直す | Rebuild PDF |
+| 設定を開く | 設定… | Settings… |
+| 終了（メニュー） | 終了 | Quit |
 | 通知（停止） | 12 枚を保存し、PDF を作りました。 | Saved 12 slides and created a PDF. |
 | 通知（単色） | 画面が 10 秒以上、単色のままです。共有の停止、キャプチャ防止、最小化の可能性があります。 | The screen has been a single colour for over 10 seconds. Sharing may have stopped, capture may be blocked, or the window may be minimized. |
 | 通知（窓を見失った） | 授業の窓が見つからないので、一時停止しました。 | Paused because the lecture window can't be found. |
