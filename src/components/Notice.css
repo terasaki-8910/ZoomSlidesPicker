@@ -1,0 +1,17 @@
+.notice {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.notice-warning {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.notice-neutral {
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+}
