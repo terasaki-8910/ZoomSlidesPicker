@@ -8,9 +8,22 @@ use std::{
 
 use xcap::{image::RgbaImage, Monitor, Window};
 
+// macOS only: the CoreGraphics framework does not exist on Windows.
+#[cfg(target_os = "macos")]
 #[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {
     fn CGPreflightScreenCaptureAccess() -> bool;
+}
+
+#[cfg(target_os = "macos")]
+fn screen_capture_granted() -> bool {
+    unsafe { CGPreflightScreenCaptureAccess() }
+}
+
+// Windows has no screen-recording permission prompt; report true so the output line stays uniform.
+#[cfg(not(target_os = "macos"))]
+fn screen_capture_granted() -> bool {
+    true
 }
 
 const SAVE_LIMIT: usize = 40;
@@ -107,7 +120,7 @@ fn sample_loop(
 }
 
 fn list() {
-    let granted = unsafe { CGPreflightScreenCaptureAccess() };
+    let granted = screen_capture_granted();
     println!("CGPreflightScreenCaptureAccess={granted}");
     for m in Monitor::all().unwrap_or_default() {
         println!(
