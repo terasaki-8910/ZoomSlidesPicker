@@ -12,3 +12,13 @@ coverage/
 .env
 .env.*
 !.env.example
+# Rust and Tauri build output (generated ACL schemas are rebuilt by tauri-build)
+target/
+src-tauri/target/
+src-tauri/gen/schemas/
+# local Python environment for the fixture generator
+.venv/
+# Playwright output and the Playwright MCP's working files
+playwright-report/
+test-results/
+.playwright-mcp/
