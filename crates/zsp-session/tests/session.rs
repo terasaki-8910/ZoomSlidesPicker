@@ -44,15 +44,30 @@ impl Trash for DirTrash {
 fn meta() -> SessionMeta {
     SessionMeta {
         app_version: "0.1.0".into(),
-        source: Source { kind: SourceKind::Window, app: Some("test".into()), title: Some("t".into()), platform: "macos".into(), file: None },
-        region: Some(RegionRecord { x: 0.0, y: 0.0, w: 1.0, h: 1.0 }),
+        source: Source {
+            kind: SourceKind::Window,
+            app: Some("test".into()),
+            title: Some("t".into()),
+            platform: "macos".into(),
+            file: None,
+        },
+        region: Some(RegionRecord {
+            x: 0.0,
+            y: 0.0,
+            w: 1.0,
+            h: 1.0,
+        }),
         interval_s: 0.5,
     }
 }
 
 fn new_session(root: &Path) -> Session {
     let writer = SessionWriter::create(&root.join("out"), Local::now(), meta()).unwrap();
-    Session::new(writer, zsp_detect::Config::default(), Box::new(DirTrash(root.join("trash"))))
+    Session::new(
+        writer,
+        zsp_detect::Config::default(),
+        Box::new(DirTrash(root.join("trash"))),
+    )
 }
 
 /// Feed `img` every 0.5 s for t in [from, to); collect notices.
@@ -108,7 +123,10 @@ fn saves_each_slide_and_finishes_with_pdf() {
     assert!(pdf.expect("pdf written").exists());
     assert_eq!(session_json(&dir)["captures"].as_array().unwrap().len(), 2);
     assert_eq!(s.status().state, State::Stopped);
-    assert!(s.finish(16.0, Local::now()).unwrap().is_empty(), "finish is idempotent");
+    assert!(
+        s.finish(16.0, Local::now()).unwrap().is_empty(),
+        "finish is idempotent"
+    );
 }
 
 /// The held frame is written, not the frame on screen at save time: A is committed when B
@@ -150,15 +168,32 @@ fn undo_moves_the_file_to_trash_and_does_not_resave() {
     let first = saved(&n);
     assert_eq!(first.len(), 1);
     let undo = s.control(8.0, Control::Undo).unwrap();
-    assert_eq!(undo, vec![Notice::Undone { index: 1, path: first[0].1.clone() }]);
+    assert_eq!(
+        undo,
+        vec![Notice::Undone {
+            index: 1,
+            path: first[0].1.clone()
+        }]
+    );
     assert!(!first[0].1.exists());
-    assert!(root.path().join("trash").join(first[0].1.file_name().unwrap()).exists());
+    assert!(
+        root.path()
+            .join("trash")
+            .join(first[0].1.file_name().unwrap())
+            .exists()
+    );
     let mut later = Vec::new();
     feed(&mut s, &slide(b'A'), 8.0, 20.0, &mut later);
     assert!(saved(&later).is_empty(), "{later:?}");
     let j = session_json(&s.status().dir);
     assert_eq!(j["captures"].as_array().unwrap().len(), 0);
-    assert!(j["events"].as_array().unwrap().iter().any(|e| e["type"] == "undo"));
+    assert!(
+        j["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| e["type"] == "undo")
+    );
     assert_eq!(s.status().count, 0);
     assert_eq!(s.status().last_capture, None);
 }
@@ -199,9 +234,16 @@ fn lost_window_pauses_once_and_reports_its_return() {
     let st = s.status();
     assert_eq!((st.state, st.window_lost), (State::Paused, true));
 
-    assert_eq!(s.on_frame(10.0, slide(b'B')).unwrap(), vec![Notice::WindowBack]);
+    assert_eq!(
+        s.on_frame(10.0, slide(b'B')).unwrap(),
+        vec![Notice::WindowBack]
+    );
     let st = s.status();
-    assert_eq!((st.state, st.window_lost), (State::Paused, false), "stays paused until resumed");
+    assert_eq!(
+        (st.state, st.window_lost),
+        (State::Paused, false),
+        "stays paused until resumed"
+    );
     assert!(s.on_frame(10.5, slide(b'B')).unwrap().is_empty());
     let events: Vec<String> = session_json(&st.dir)["events"]
         .as_array()
@@ -222,7 +264,15 @@ fn single_colour_stretch_is_reported_once_and_not_saved() {
     assert!(saved(&n).is_empty(), "{n:?}");
     assert_eq!(n.iter().filter(|x| **x == Notice::Blank).count(), 1);
     let j = session_json(&s.status().dir);
-    assert_eq!(j["events"].as_array().unwrap().iter().filter(|e| e["type"] == "blank").count(), 1);
+    assert_eq!(
+        j["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| e["type"] == "blank")
+            .count(),
+        1
+    );
 }
 
 /// A recorded source: frames as fast as they decode, then the session finishes by itself.
@@ -230,7 +280,11 @@ struct VecSource(Vec<(f64, RgbaImage)>);
 
 impl FrameSource for VecSource {
     fn next_frame(&mut self, _t: f64) -> Result<Option<(f64, RgbaImage)>, SourceError> {
-        Ok(if self.0.is_empty() { None } else { Some(self.0.remove(0)) })
+        Ok(if self.0.is_empty() {
+            None
+        } else {
+            Some(self.0.remove(0))
+        })
     }
     fn is_live(&self) -> bool {
         false
@@ -248,11 +302,19 @@ fn spawn_runs_a_recorded_source_to_the_end() {
     }
     let seen: Arc<Mutex<Vec<Notice>>> = Arc::new(Mutex::new(Vec::new()));
     let sink = seen.clone();
-    let handle = spawn(Box::new(VecSource(frames)), s, 0.5, Box::new(move |n, _| sink.lock().unwrap().push(n.clone())));
+    let handle = spawn(
+        Box::new(VecSource(frames)),
+        s,
+        0.5,
+        Box::new(move |n, _| sink.lock().unwrap().push(n.clone())),
+    );
     let status_dir = handle.status().dir.clone();
     handle.join().unwrap();
     let seen = seen.lock().unwrap();
     assert_eq!(saved(&seen).len(), 2, "{seen:?}");
-    assert!(seen.iter().any(|n| matches!(n, Notice::Finished { count: 2, .. })));
+    assert!(
+        seen.iter()
+            .any(|n| matches!(n, Notice::Finished { count: 2, .. }))
+    );
     assert!(status_dir.join("slides.pdf").exists());
 }

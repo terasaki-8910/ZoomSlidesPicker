@@ -28,7 +28,12 @@ pub fn load_strip(id: &str) -> Strip {
     let gw = meta["grid_w"].as_u64().unwrap() as usize;
     let gh = meta["grid_h"].as_u64().unwrap() as usize;
     let scale = meta["detail_scale"].as_f64().unwrap() as f32;
-    let times: Vec<f64> = meta["times"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+    let times: Vec<f64> = meta["times"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_f64().unwrap())
+        .collect();
 
     let grid_img = image::open(dir.join("grid.png")).unwrap().into_luma8();
     let detail_img = image::open(dir.join("detail.png")).unwrap().into_luma16();
@@ -41,14 +46,25 @@ pub fn load_strip(id: &str) -> Strip {
     let mut grids = Vec::with_capacity(times.len());
     let mut details = Vec::with_capacity(times.len());
     for i in 0..times.len() {
-        grids.push(Grid { width: gw, height: gh, data: gpix[i * cells..(i + 1) * cells].to_vec() });
+        grids.push(Grid {
+            width: gw,
+            height: gh,
+            data: gpix[i * cells..(i + 1) * cells].to_vec(),
+        });
         details.push(Detail {
             width: gw,
             height: gh,
-            data: dpix[i * cells..(i + 1) * cells].iter().map(|&v| v as f32 / scale).collect(),
+            data: dpix[i * cells..(i + 1) * cells]
+                .iter()
+                .map(|&v| v as f32 / scale)
+                .collect(),
         });
     }
-    Strip { times, grids, details }
+    Strip {
+        times,
+        grids,
+        details,
+    }
 }
 
 pub struct Expected {
@@ -67,7 +83,13 @@ pub fn expected(id: &str) -> Expected {
             .as_array()
             .unwrap()
             .iter()
-            .map(|w| (w["label"].as_str().unwrap().to_string(), w["from"].as_f64().unwrap(), w["to"].as_f64().unwrap()))
+            .map(|w| {
+                (
+                    w["label"].as_str().unwrap().to_string(),
+                    w["from"].as_f64().unwrap(),
+                    w["to"].as_f64().unwrap(),
+                )
+            })
             .collect()
     };
     Expected {
@@ -75,7 +97,13 @@ pub fn expected(id: &str) -> Expected {
         quiet: windows("quiet"),
         revisits: e["revisits"].as_u64().unwrap() as usize,
         blanks: e["blanks"].as_u64().unwrap() as usize,
-        sharp_from: e.get("sharp_from").map(|v| v.as_array().unwrap().iter().map(|x| x.as_f64().unwrap()).collect()),
+        sharp_from: e.get("sharp_from").map(|v| {
+            v.as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_f64().unwrap())
+                .collect()
+        }),
     }
 }
 
@@ -101,11 +129,27 @@ pub fn collect(events: Vec<Event>, held: &mut Option<f64>, run: &mut Run) {
     for ev in events {
         match ev {
             Event::Hold { t } => *held = Some(t),
-            Event::Save { index, t_content, t_save, held_t, reason } => {
+            Event::Save {
+                index,
+                t_content,
+                t_save,
+                held_t,
+                reason,
+            } => {
                 if reason != SaveReason::Manual {
-                    assert_eq!(Some(held_t), *held, "Save at {t_save} must write the last held frame");
+                    assert_eq!(
+                        Some(held_t),
+                        *held,
+                        "Save at {t_save} must write the last held frame"
+                    );
                 }
-                run.saves.push(SaveRec { index, t_content, t_save, held_t, reason });
+                run.saves.push(SaveRec {
+                    index,
+                    t_content,
+                    t_save,
+                    held_t,
+                    reason,
+                });
             }
             Event::Revisit { t_content, .. } => run.revisits.push(t_content),
             Event::Blank { t } => run.blanks.push(t),

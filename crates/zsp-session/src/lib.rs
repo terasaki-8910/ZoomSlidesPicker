@@ -20,7 +20,7 @@ pub use zsp_capture::RgbaImage;
 mod engine;
 mod sources;
 
-pub use engine::{EngineHandle, FrameSource, SourceError, spawn};
+pub use engine::{EngineHandle, FrameSource, Notify, SourceError, spawn};
 pub use sources::{VideoSource, WindowSource};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -58,13 +58,23 @@ pub enum Control {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Notice {
-    Saved { index: usize, path: PathBuf },
-    Undone { index: usize, path: PathBuf },
+    Saved {
+        index: usize,
+        path: PathBuf,
+    },
+    Undone {
+        index: usize,
+        path: PathBuf,
+    },
     /// A single-colour stretch reached 10 s (reported once per stretch).
     Blank,
     WindowLost,
     WindowBack,
-    Finished { dir: PathBuf, count: usize, pdf: Option<PathBuf> },
+    Finished {
+        dir: PathBuf,
+        count: usize,
+        pdf: Option<PathBuf>,
+    },
 }
 
 /// The single-threaded session core.
@@ -73,7 +83,11 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(writer: SessionWriter, cfg: zsp_detect::Config, trash: Box<dyn Trash + Send>) -> Self {
+    pub fn new(
+        writer: SessionWriter,
+        cfg: zsp_detect::Config,
+        trash: Box<dyn Trash + Send>,
+    ) -> Self {
         let _ = (writer, cfg, trash);
         todo!()
     }

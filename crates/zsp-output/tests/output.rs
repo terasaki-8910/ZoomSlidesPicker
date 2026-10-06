@@ -7,12 +7,16 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Local, TimeZone};
 use serde_json::Value;
 use zsp_output::{
-    CaptureReason, EventKind, PDF_FILE, RegionRecord, SESSION_FILE, SessionMeta, SessionWriter, Source, SourceKind,
-    Trash, capture_file_name, create_session_dir, rebuild_pdf, session_dir_name,
+    CaptureReason, EventKind, PDF_FILE, RegionRecord, SESSION_FILE, SessionMeta, SessionWriter,
+    Source, SourceKind, Trash, capture_file_name, create_session_dir, rebuild_pdf,
+    session_dir_name,
 };
 
 fn started() -> DateTime<Local> {
-    Local.with_ymd_and_hms(2026, 10, 6, 9, 5, 0).single().unwrap()
+    Local
+        .with_ymd_and_hms(2026, 10, 6, 9, 5, 0)
+        .single()
+        .unwrap()
 }
 
 fn meta() -> SessionMeta {
@@ -25,7 +29,12 @@ fn meta() -> SessionMeta {
             platform: "macos".into(),
             file: None,
         },
-        region: Some(RegionRecord { x: 0.1, y: 0.1, w: 0.8, h: 0.7 }),
+        region: Some(RegionRecord {
+            x: 0.1,
+            y: 0.1,
+            w: 0.8,
+            h: 0.7,
+        }),
         interval_s: 0.5,
     }
 }
@@ -34,14 +43,21 @@ fn pattern(w: u32, h: u32, seed: u32) -> Vec<u8> {
     let mut v = Vec::with_capacity((w * h * 4) as usize);
     for y in 0..h {
         for x in 0..w {
-            v.extend_from_slice(&[((x * 7 + y * 13 + seed) % 256) as u8, ((x * 3 + seed) % 256) as u8, ((y * 5) % 256) as u8, 255]);
+            v.extend_from_slice(&[
+                ((x * 7 + y * 13 + seed) % 256) as u8,
+                ((x * 3 + seed) % 256) as u8,
+                ((y * 5) % 256) as u8,
+                255,
+            ]);
         }
     }
     v
 }
 
 fn rgb_of(rgba: &[u8]) -> Vec<u8> {
-    rgba.chunks_exact(4).flat_map(|p| [p[0], p[1], p[2]]).collect()
+    rgba.chunks_exact(4)
+        .flat_map(|p| [p[0], p[1], p[2]])
+        .collect()
 }
 
 /// Moves files into a folder instead of the OS trash.
@@ -62,8 +78,14 @@ fn assert_schema_valid(instance: &Value) {
     let schema_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/session.schema.json");
     let schema: Value = serde_json::from_str(&fs::read_to_string(schema_path).unwrap()).unwrap();
     let validator = jsonschema::validator_for(&schema).expect("schema compiles");
-    let errors: Vec<String> = validator.iter_errors(instance).map(|e| format!("{e} at {}", e.instance_path())).collect();
-    assert!(errors.is_empty(), "session.json does not match the schema: {errors:#?}");
+    let errors: Vec<String> = validator
+        .iter_errors(instance)
+        .map(|e| format!("{e} at {}", e.instance_path()))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "session.json does not match the schema: {errors:#?}"
+    );
 }
 
 fn num(o: &lopdf::Object) -> f64 {
@@ -81,7 +103,11 @@ fn pdf_page_sizes(path: &Path) -> Vec<(f64, f64)> {
         .values()
         .map(|id| {
             let page = doc.get_dictionary(*id).unwrap();
-            let mb = page.get(b"MediaBox").expect("each page has its own MediaBox").as_array().unwrap();
+            let mb = page
+                .get(b"MediaBox")
+                .expect("each page has its own MediaBox")
+                .as_array()
+                .unwrap();
             (num(&mb[2]) - num(&mb[0]), num(&mb[3]) - num(&mb[1]))
         })
         .collect()
@@ -116,13 +142,18 @@ fn b5_png_is_lossless() {
     let root = tempfile::tempdir().unwrap();
     let mut w = SessionWriter::create(root.path(), started(), meta()).unwrap();
     let rgba = pattern(37, 23, 5);
-    let path = w.save_capture(1, &rgba, 37, 23, 1.0, 5.0, CaptureReason::Settled).unwrap();
+    let path = w
+        .save_capture(1, &rgba, 37, 23, 1.0, 5.0, CaptureReason::Settled)
+        .unwrap();
     assert_eq!(path.file_name().unwrap(), "001_00-00-01.png");
     let back = image::open(&path).unwrap().into_rgb8();
     assert_eq!(back.dimensions(), (37, 23));
     assert_eq!(back.into_raw(), rgb_of(&rgba));
     let rec = &w.session().captures[0];
-    assert_eq!((rec.index, rec.width, rec.height, rec.reason), (1, 37, 23, CaptureReason::Settled));
+    assert_eq!(
+        (rec.index, rec.width, rec.height, rec.reason),
+        (1, 37, 23, CaptureReason::Settled)
+    );
 }
 
 /// B3: session.json matches the schema mid-session (as left by a crash) and after finishing.
@@ -132,8 +163,26 @@ fn b3_session_json_matches_schema() {
     let mut w = SessionWriter::create(root.path(), started(), meta()).unwrap();
     assert_schema_valid(&read_session(w.dir()));
 
-    w.save_capture(1, &pattern(20, 10, 1), 20, 10, 1.0, 5.0, CaptureReason::Settled).unwrap();
-    w.save_capture(2, &pattern(20, 10, 2), 20, 10, 15.5, 19.5, CaptureReason::Manual).unwrap();
+    w.save_capture(
+        1,
+        &pattern(20, 10, 1),
+        20,
+        10,
+        1.0,
+        5.0,
+        CaptureReason::Settled,
+    )
+    .unwrap();
+    w.save_capture(
+        2,
+        &pattern(20, 10, 2),
+        20,
+        10,
+        15.5,
+        19.5,
+        CaptureReason::Manual,
+    )
+    .unwrap();
     w.add_revisit(53.0, 1).unwrap();
     w.add_event(60.0, EventKind::Paused).unwrap();
     w.add_event(61.0, EventKind::Resumed).unwrap();
@@ -143,7 +192,14 @@ fn b3_session_json_matches_schema() {
     assert!(mid["pdf"].is_null());
     assert_eq!(mid["captures"].as_array().unwrap().len(), 2);
 
-    let pdf = w.finish(Local.with_ymd_and_hms(2026, 10, 6, 10, 35, 0).single().unwrap()).unwrap();
+    let pdf = w
+        .finish(
+            Local
+                .with_ymd_and_hms(2026, 10, 6, 10, 35, 0)
+                .single()
+                .unwrap(),
+        )
+        .unwrap();
     assert_eq!(pdf.as_deref(), Some(w.dir().join(PDF_FILE).as_path()));
     let done = read_session(w.dir());
     assert_schema_valid(&done);
@@ -151,8 +207,16 @@ fn b3_session_json_matches_schema() {
     assert_eq!(done["pdf"]["pages"], 2);
     assert!(done["pdf"]["rebuilt_at"].is_null());
     // No temp file left behind by the atomic rewrite.
-    let names: Vec<String> = fs::read_dir(w.dir()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
-    assert!(names.iter().all(|n| n.ends_with(".png") || n == SESSION_FILE || n == PDF_FILE), "unexpected files: {names:?}");
+    let names: Vec<String> = fs::read_dir(w.dir())
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        names
+            .iter()
+            .all(|n| n.ends_with(".png") || n == SESSION_FILE || n == PDF_FILE),
+        "unexpected files: {names:?}"
+    );
 }
 
 /// B4: one page per capture, in order, page size = image size; images embedded losslessly.
@@ -163,8 +227,21 @@ fn b4_pdf_pages_sizes_and_lossless_images() {
     let sizes = [(64u32, 48u32), (100, 50), (37, 91)];
     let first = pattern(64, 48, 9);
     for (i, &(sw, sh)) in sizes.iter().enumerate() {
-        let rgba = if i == 0 { first.clone() } else { pattern(sw, sh, i as u32) };
-        w.save_capture(i + 1, &rgba, sw, sh, i as f64 * 10.0, i as f64 * 10.0 + 4.0, CaptureReason::Settled).unwrap();
+        let rgba = if i == 0 {
+            first.clone()
+        } else {
+            pattern(sw, sh, i as u32)
+        };
+        w.save_capture(
+            i + 1,
+            &rgba,
+            sw,
+            sh,
+            i as f64 * 10.0,
+            i as f64 * 10.0 + 4.0,
+            CaptureReason::Settled,
+        )
+        .unwrap();
     }
     let pdf = w.finish(Local::now()).unwrap().unwrap();
     let got = pdf_page_sizes(&pdf);
@@ -178,10 +255,28 @@ fn b4_pdf_pages_sizes_and_lossless_images() {
     let resources = resources.expect("page has a resource dictionary");
     let xobjects = resources.get(b"XObject").unwrap().as_dict().unwrap();
     let (_, xref) = xobjects.iter().next().expect("one image XObject");
-    let stream = doc.get_object(xref.as_reference().unwrap()).unwrap().as_stream().unwrap();
-    assert_eq!(stream.dict.get(b"Filter").unwrap().as_name().unwrap(), b"FlateDecode");
-    assert_eq!(stream.dict.get(b"BitsPerComponent").unwrap().as_i64().unwrap(), 8);
-    assert_eq!(stream.dict.get(b"ColorSpace").unwrap().as_name().unwrap(), b"DeviceRGB");
+    let stream = doc
+        .get_object(xref.as_reference().unwrap())
+        .unwrap()
+        .as_stream()
+        .unwrap();
+    assert_eq!(
+        stream.dict.get(b"Filter").unwrap().as_name().unwrap(),
+        b"FlateDecode"
+    );
+    assert_eq!(
+        stream
+            .dict
+            .get(b"BitsPerComponent")
+            .unwrap()
+            .as_i64()
+            .unwrap(),
+        8
+    );
+    assert_eq!(
+        stream.dict.get(b"ColorSpace").unwrap().as_name().unwrap(),
+        b"DeviceRGB"
+    );
     assert_eq!(stream.decompressed_content().unwrap(), rgb_of(&first));
 }
 
@@ -192,8 +287,20 @@ fn b7_undo_moves_to_trash() {
     let trash_dir = root.path().join("trash");
     let trash = DirTrash(trash_dir.clone());
     let mut w = SessionWriter::create(&root.path().join("out"), started(), meta()).unwrap();
-    let p1 = w.save_capture(1, &pattern(8, 8, 1), 8, 8, 1.0, 5.0, CaptureReason::Settled).unwrap();
-    let p2 = w.save_capture(2, &pattern(8, 8, 2), 8, 8, 9.0, 13.0, CaptureReason::Settled).unwrap();
+    let p1 = w
+        .save_capture(1, &pattern(8, 8, 1), 8, 8, 1.0, 5.0, CaptureReason::Settled)
+        .unwrap();
+    let p2 = w
+        .save_capture(
+            2,
+            &pattern(8, 8, 2),
+            8,
+            8,
+            9.0,
+            13.0,
+            CaptureReason::Settled,
+        )
+        .unwrap();
 
     assert_eq!(w.undo_last(14.0, &trash).unwrap(), Some(p2.clone()));
     assert!(!p2.exists());
@@ -218,7 +325,18 @@ fn b9_rebuild_pdf_from_remaining_images() {
     let mut paths = Vec::new();
     for i in 1..=5u32 {
         let (sw, sh) = (i * 10, 10);
-        paths.push(w.save_capture(i as usize, &pattern(sw, sh, i), sw, sh, i as f64 * 10.0, i as f64 * 10.0 + 4.0, CaptureReason::Settled).unwrap());
+        paths.push(
+            w.save_capture(
+                i as usize,
+                &pattern(sw, sh, i),
+                sw,
+                sh,
+                i as f64 * 10.0,
+                i as f64 * 10.0 + 4.0,
+                CaptureReason::Settled,
+            )
+            .unwrap(),
+        );
     }
     w.finish(Local::now()).unwrap();
     let dir = w.dir().to_path_buf();
@@ -226,9 +344,16 @@ fn b9_rebuild_pdf_from_remaining_images() {
     fs::remove_file(&paths[3]).unwrap();
 
     assert_eq!(rebuild_pdf(&dir, Local::now()).unwrap(), 3);
-    assert_eq!(pdf_page_sizes(&dir.join(PDF_FILE)), vec![(10.0, 10.0), (30.0, 10.0), (50.0, 10.0)]);
+    assert_eq!(
+        pdf_page_sizes(&dir.join(PDF_FILE)),
+        vec![(10.0, 10.0), (30.0, 10.0), (50.0, 10.0)]
+    );
     let s = read_session(&dir);
-    assert_eq!(s["captures"].as_array().unwrap().len(), 5, "captures are left unchanged");
+    assert_eq!(
+        s["captures"].as_array().unwrap().len(),
+        5,
+        "captures are left unchanged"
+    );
     assert_eq!(s["pdf"]["pages"], 3);
     assert!(s["pdf"]["rebuilt_at"].is_string());
     assert_schema_valid(&s);
@@ -239,7 +364,11 @@ fn b9_rebuild_pdf_from_remaining_images() {
     let before = fs::read(dir.join(PDF_FILE)).unwrap();
     let err = rebuild_pdf(&dir, Local::now()).unwrap_err();
     assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
-    assert_eq!(fs::read(dir.join(PDF_FILE)).unwrap(), before, "nothing is written when no images are left");
+    assert_eq!(
+        fs::read(dir.join(PDF_FILE)).unwrap(),
+        before,
+        "nothing is written when no images are left"
+    );
 }
 
 /// A session without captures writes no PDF.

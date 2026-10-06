@@ -45,11 +45,16 @@ impl EngineHandle {
     /// Wait for the session thread to end (after `Stop`, or at the end of a recorded input).
     pub fn join(mut self) -> io::Result<()> {
         match self.join.take() {
-            Some(h) => h.join().unwrap_or_else(|_| Err(io::Error::other("session thread panicked"))),
+            Some(h) => h
+                .join()
+                .unwrap_or_else(|_| Err(io::Error::other("session thread panicked"))),
             None => Ok(()),
         }
     }
 }
+
+/// Receives every notice together with the status after it (called on the session thread).
+pub type Notify = Box<dyn Fn(&Notice, &Status) + Send>;
 
 /// Run `session` on `source` in a new thread.
 ///
@@ -66,7 +71,7 @@ pub fn spawn(
     source: Box<dyn FrameSource>,
     session: Session,
     interval_s: f64,
-    notify: Box<dyn Fn(&Notice, &Status) + Send>,
+    notify: Notify,
 ) -> EngineHandle {
     let _ = (source, session, interval_s, notify);
     todo!()

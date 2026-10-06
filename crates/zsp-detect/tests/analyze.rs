@@ -24,7 +24,9 @@ fn b1_grid_and_detail_match_reference() {
     assert!(frames.len() >= 8);
 
     for (name, meta) in frames {
-        let rgb = image::open(dir.join(format!("{name}.png"))).unwrap().into_rgb8();
+        let rgb = image::open(dir.join(format!("{name}.png")))
+            .unwrap()
+            .into_rgb8();
         let (w, h) = rgb.dimensions();
         assert_eq!(w as u64, meta["width"].as_u64().unwrap());
         let rgba: Vec<u8> = rgb.pixels().flat_map(|p| [p[0], p[1], p[2], 255]).collect();
@@ -33,10 +35,22 @@ fn b1_grid_and_detail_match_reference() {
         let gw = meta["grid_w"].as_u64().unwrap() as usize;
         let gh = meta["grid_h"].as_u64().unwrap() as usize;
         assert_eq!((grid.width, grid.height), (gw, gh), "{name}: grid shape");
-        assert_eq!((detail.width, detail.height), (gw, gh), "{name}: detail shape");
+        assert_eq!(
+            (detail.width, detail.height),
+            (gw, gh),
+            "{name}: detail shape"
+        );
 
-        let ref_grid = image::open(dir.join(format!("{name}.grid.png"))).unwrap().into_luma8().into_raw();
-        let diffs: Vec<i32> = grid.data.iter().zip(&ref_grid).map(|(a, b)| (*a as i32 - *b as i32).abs()).collect();
+        let ref_grid = image::open(dir.join(format!("{name}.grid.png")))
+            .unwrap()
+            .into_luma8()
+            .into_raw();
+        let diffs: Vec<i32> = grid
+            .data
+            .iter()
+            .zip(&ref_grid)
+            .map(|(a, b)| (*a as i32 - *b as i32).abs())
+            .collect();
         let mean = diffs.iter().sum::<i32>() as f64 / diffs.len() as f64;
         let max = *diffs.iter().max().unwrap();
         assert!(mean <= 1.0, "{name}: grid mean |diff| {mean:.3} > 1.0");
@@ -56,6 +70,9 @@ fn b1_grid_and_detail_match_reference() {
             .map(|(a, b)| ((a - b).abs() / b.max(1.0)) as f64)
             .sum::<f64>()
             / ref_detail.len() as f64;
-        assert!(rel <= 0.05, "{name}: detail mean relative diff {rel:.4} > 0.05");
+        assert!(
+            rel <= 0.05,
+            "{name}: detail mean relative diff {rel:.4} > 0.05"
+        );
     }
 }

@@ -7,7 +7,10 @@ use std::time::{Duration, Instant};
 use zsp_detect::{Config, Detector, analyze};
 
 #[test]
-#[cfg_attr(debug_assertions, ignore = "timing is only meaningful in a release build")]
+#[cfg_attr(
+    debug_assertions,
+    ignore = "timing is only meaningful in a release build"
+)]
 fn a11_analyze_and_step_within_20ms() {
     let (w, h) = (2000u32, 1400u32);
     let mut rgba = vec![255u8; (w * h * 4) as usize];
@@ -37,5 +40,8 @@ fn a11_analyze_and_step_within_20ms() {
     }
     times.sort();
     let median = times[times.len() / 2];
-    assert!(median <= Duration::from_millis(20), "median {median:?} > 20 ms");
+    assert!(
+        median <= Duration::from_millis(20),
+        "median {median:?} > 20 ms"
+    );
 }
