@@ -7,6 +7,7 @@ import { useLang } from "../i18n";
 import {
   beginRegion,
   closeWindow,
+  fitPanel,
   getAppState,
   listWindows,
   onAppState,
@@ -42,6 +43,26 @@ export default function Panel() {
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildStatus, setRebuildStatus] = useState<RebuildStatus | null>(null);
   const listboxRef = useRef<HTMLUListElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Reports content height so Rust can size the (otherwise fixed-width, 480 px tall)
+  // panel window to fit it -- mostly empty when stopped, taller once a session is
+  // running (docs/impl/ipc.md > fit_panel; docs/impl/shell.md).
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    function report() {
+      if (el) void fitPanel(el.getBoundingClientRect().height);
+    }
+    report();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", report);
+      return () => window.removeEventListener("resize", report);
+    }
+    const ro = new ResizeObserver(report);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -285,7 +306,7 @@ export default function Panel() {
   }
 
   return (
-    <div className="panel" data-testid="panel-root">
+    <div className="panel" data-testid="panel-root" ref={panelRef}>
       <header className="panel-header">
         <span className="panel-header-title">{t("panel.title")}</span>
         <IconButton icon={<FiSettings aria-hidden="true" />} label={t("action.openSettings")} onClick={() => void openSettings()} />

@@ -101,6 +101,10 @@ export function closeWindow(): Promise<void> {
   return useMock ? mock.closeWindow() : invoke("close_window");
 }
 
+export function fitPanel(height: number): Promise<void> {
+  return useMock ? mock.fitPanel(height) : invoke("fit_panel", { height });
+}
+
 export function onAppState(cb: (state: AppState) => void): Promise<UnlistenFn> {
   return useMock ? mock.onAppState(cb) : listen<AppState>("app-state", (e) => cb(e.payload));
 }

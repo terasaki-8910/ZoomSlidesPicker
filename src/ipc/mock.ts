@@ -363,6 +363,11 @@ export async function openSettings(): Promise<void> {}
 
 export async function closeWindow(): Promise<void> {}
 
+export async function fitPanel(height: number): Promise<void> {
+  void height; // no real panel window to resize outside Tauri -- the real backend
+  // clamps and resizes it (docs/impl/ipc.md > fit_panel)
+}
+
 export async function onAppState(cb: (state: AppState) => void): Promise<UnlistenFn> {
   appStateListeners.add(cb);
   return () => {
