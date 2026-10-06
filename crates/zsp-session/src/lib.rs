@@ -171,8 +171,8 @@ impl Session {
     /// - `Pause`: detector pause, drop the held frame, record `paused`.
     /// - `Resume`: detector resume at `t`, record `resumed`, clear `window_lost`.
     /// - `SaveNow` (running, with a latest frame): manual save of the latest frame.
-    /// - `Undo`: undo the latest capture in the detector and move its PNG to the trash
-    ///   ([`Notice::Undone`]).
+    /// - `Undo` (running or paused): undo the latest capture in the detector and move its PNG
+    ///   to the trash ([`Notice::Undone`]). After finishing it does nothing (the PDF exists).
     /// - `Stop`: same as [`Session::finish`] with the current local time.
     ///
     /// Controls that do not apply in the current state (e.g. `Resume` while running) do nothing.
@@ -229,6 +229,10 @@ impl Session {
                 Ok(vec![Notice::Saved { index, path }])
             }
             Control::Undo => {
+                // After finishing, the PDF already contains the capture: undo no longer applies.
+                if self.state == State::Stopped {
+                    return Ok(Vec::new());
+                }
                 let Some(index) = self.detector.undo_last() else {
                     return Ok(Vec::new());
                 };

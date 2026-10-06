@@ -181,3 +181,73 @@ fn lost_source_pauses_the_session_and_reports_it() {
     let seen = notices.lock().unwrap().clone();
     assert!(seen.contains(&Notice::WindowLost), "{seen:?}");
 }
+
+/// After a pause, frames resume at the normal cadence instead of catching up on the ticks
+/// missed while paused.
+#[test]
+fn resume_does_not_catch_up_missed_frames() {
+    let root = tempfile::tempdir().unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let source = FakeLiveSource {
+        calls: calls.clone(),
+        lost: false,
+        frame: fake_frame(),
+    };
+    let handle = spawn(
+        Box::new(source),
+        new_session(root.path()),
+        0.05,
+        Box::new(|_, _| {}),
+    );
+    thread::sleep(Duration::from_millis(150));
+    handle.send(Control::Pause);
+    wait_for_status(
+        &handle,
+        |s| s.state == State::Paused,
+        Duration::from_secs(1),
+    );
+    thread::sleep(Duration::from_millis(600)); // 12 intervals missed
+    let at_resume = calls.load(Ordering::SeqCst);
+    handle.send(Control::Resume);
+    thread::sleep(Duration::from_millis(150)); // about 3 intervals
+    let delta = calls.load(Ordering::SeqCst) - at_resume;
+    assert!(
+        delta <= 6,
+        "frames after resume should follow the interval, not catch up: {delta} in 0.15 s"
+    );
+    handle.send(Control::Stop);
+    handle.join().unwrap();
+}
+
+/// Dropping the handle without Stop (the app quitting) still finishes the session.
+#[test]
+fn dropping_the_handle_finishes_the_session() {
+    let root = tempfile::tempdir().unwrap();
+    let source = FakeLiveSource {
+        calls: Arc::new(AtomicUsize::new(0)),
+        lost: false,
+        frame: fake_frame(),
+    };
+    let handle = spawn(
+        Box::new(source),
+        new_session(root.path()),
+        0.05,
+        Box::new(|_, _| {}),
+    );
+    let dir = handle.status().dir.clone();
+    thread::sleep(Duration::from_millis(100));
+    drop(handle);
+    let start = Instant::now();
+    loop {
+        let text = std::fs::read_to_string(dir.join("session.json")).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        if json["ended_at"].is_string() {
+            break;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(3),
+            "session was not finished after the handle was dropped"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+}

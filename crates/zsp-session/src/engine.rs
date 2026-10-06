@@ -171,6 +171,19 @@ fn run_recorded(
     }
 }
 
+/// The handle was dropped without `Stop` (for example the app is quitting): finish the session
+/// so the PDF and the final session.json are still written.
+fn finish_on_disconnect(
+    session: &mut Session,
+    start: Instant,
+    status: &Arc<Mutex<Status>>,
+    notify: &Notify,
+) -> io::Result<()> {
+    let notices = session.finish(start.elapsed().as_secs_f64(), Local::now())?;
+    publish(session, status, notify, notices);
+    Ok(())
+}
+
 /// One frame per `interval_s` of wall-clock time; controls are reacted to immediately
 /// through the same wait. While paused (and the window is not lost), no frames are
 /// requested at all; while the window is lost, the source is polled every 2 s.
@@ -197,7 +210,7 @@ fn run_live(
                         return Ok(());
                     }
                 }
-                Err(_) => return Ok(()),
+                Err(_) => return finish_on_disconnect(&mut session, start, status, notify),
             }
             continue;
         }
@@ -216,7 +229,9 @@ fn run_live(
                 }
                 continue;
             }
-            Err(RecvTimeoutError::Disconnected) => return Ok(()),
+            Err(RecvTimeoutError::Disconnected) => {
+                return finish_on_disconnect(&mut session, start, status, notify);
+            }
             Err(RecvTimeoutError::Timeout) => {}
         }
 
@@ -225,7 +240,14 @@ fn run_live(
             Ok(Some((frame_t, frame))) => {
                 let notices = session.on_frame(frame_t, frame)?;
                 publish(&session, status, notify, notices);
+                // Keep the cadence, but never catch up on ticks missed while paused, while
+                // the window was lost, or during a slow capture: that would take a burst of
+                // frames back to back.
                 next_tick += interval;
+                let now = start.elapsed();
+                if next_tick < now {
+                    next_tick = now + interval;
+                }
             }
             Ok(None) => {
                 let notices = session.finish(t, Local::now())?;

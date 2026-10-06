@@ -318,3 +318,18 @@ fn spawn_runs_a_recorded_source_to_the_end() {
     );
     assert!(status_dir.join("slides.pdf").exists());
 }
+
+/// Undo does nothing once the session has finished: the PDF already contains the capture.
+#[test]
+fn undo_after_finish_does_nothing() {
+    let root = tempfile::tempdir().unwrap();
+    let mut s = new_session(root.path());
+    let mut n = Vec::new();
+    feed(&mut s, &slide(b'A'), 0.0, 8.0, &mut n);
+    n.extend(s.finish(8.0, Local::now()).unwrap());
+    let saves = saved(&n);
+    assert_eq!(saves.len(), 1);
+    assert!(s.control(9.0, Control::Undo).unwrap().is_empty());
+    assert!(saves[0].1.exists(), "the capture stays in place");
+    assert_eq!(s.status().count, 1);
+}
