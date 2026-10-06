@@ -15,3 +15,5 @@ coverage/
 samples/fixture/out/
 samples/proto/out/
 samples/proto/report.json
+samples/proto/out_r2/
+samples/proto/report_r2.json
