@@ -7,6 +7,7 @@ import { useLang } from "../i18n";
 import {
   beginRegion,
   closeWindow,
+  fitPanel,
   getAppState,
   listWindows,
   onAppState,
@@ -42,6 +43,29 @@ export default function Panel() {
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildStatus, setRebuildStatus] = useState<RebuildStatus | null>(null);
   const listboxRef = useRef<HTMLUListElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // Reports the content's natural height (header plus body content, not the body box,
+  // which fills the window) so Rust can size the panel window to fit it: short when
+  // stopped, taller with the window list or a running session (docs/impl/ipc.md >
+  // fit_panel).
+  useEffect(() => {
+    const header = headerRef.current;
+    const content = contentRef.current;
+    if (!header || !content) return;
+    function report() {
+      // Nothing to fit before the app state has arrived (the body renders nothing).
+      if (!header || !content || content.childElementCount === 0) return;
+      void fitPanel(Math.ceil(header.getBoundingClientRect().height + content.getBoundingClientRect().height));
+    }
+    report();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(report);
+    ro.observe(header);
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -286,11 +310,15 @@ export default function Panel() {
 
   return (
     <div className="panel" data-testid="panel-root">
-      <header className="panel-header">
+      <header className="panel-header" ref={headerRef}>
         <span className="panel-header-title">{t("panel.title")}</span>
         <IconButton icon={<FiSettings aria-hidden="true" />} label={t("action.openSettings")} onClick={() => void openSettings()} />
       </header>
-      <div className="panel-body">{renderBody()}</div>
+      <div className="panel-body">
+        <div className="panel-content" ref={contentRef}>
+          {renderBody()}
+        </div>
+      </div>
     </div>
   );
 }

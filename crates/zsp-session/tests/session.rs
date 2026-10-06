@@ -204,11 +204,21 @@ fn pause_drops_the_pending_slide_and_ignores_frames() {
     let mut s = new_session(root.path());
     let mut n = Vec::new();
     feed(&mut s, &slide(b'A'), 0.0, 2.0, &mut n);
-    n.extend(s.control(2.0, Control::Pause).unwrap());
+    assert_eq!(
+        s.control(2.0, Control::Pause).unwrap(),
+        vec![Notice::Paused]
+    );
     assert_eq!(s.status().state, State::Paused);
+    assert!(
+        s.control(2.0, Control::Pause).unwrap().is_empty(),
+        "already paused"
+    );
     feed(&mut s, &slide(b'A'), 2.0, 9.0, &mut n);
     assert!(saved(&n).is_empty(), "nothing is saved while paused: {n:?}");
-    n.extend(s.control(9.0, Control::Resume).unwrap());
+    assert_eq!(
+        s.control(9.0, Control::Resume).unwrap(),
+        vec![Notice::Resumed]
+    );
     feed(&mut s, &slide(b'B'), 9.0, 18.0, &mut n);
     n.extend(s.finish(18.0, Local::now()).unwrap());
     let saves = saved(&n);

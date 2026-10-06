@@ -30,6 +30,7 @@ export function createIpcMock() {
     openPermissionSettings: vi.fn(),
     openSettings: vi.fn(),
     closeWindow: vi.fn(),
+    fitPanel: vi.fn(),
     onAppState: vi.fn(),
     onSettings: vi.fn(),
   };

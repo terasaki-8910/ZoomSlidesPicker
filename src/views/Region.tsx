@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import Button from "../components/Button";
+import Notice from "../components/Notice";
 import { useLang } from "../i18n";
 import { cancelRegion, getRegionSnapshot, startSession } from "../ipc";
 import type { RegionSel, Snapshot } from "../ipc/types";
@@ -60,6 +61,9 @@ export default function Region() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [rect, setRect] = useState<RegionSel | null>(null);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  // A start_session error (the window closed, no permission, the save folder is not
+  // writable): Rust keeps this window open so it can be shown (docs/impl/ipc.md).
+  const [startError, setStartError] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
 
@@ -105,7 +109,8 @@ export default function Region() {
 
   const handleStart = useCallback(() => {
     if (!snapshot) return;
-    void startSession(snapshot.windowId, rect ?? FULL_RECT);
+    setStartError(null);
+    startSession(snapshot.windowId, rect ?? FULL_RECT).catch((e: unknown) => setStartError(String(e)));
   }, [snapshot, rect]);
 
   const handleCancel = useCallback(() => {
@@ -214,7 +219,7 @@ export default function Region() {
         )}
       </div>
       <div className="region-controls">
-        <p className="region-hint">{t("region.hint")}</p>
+        {startError ? <Notice>{startError}</Notice> : <p className="region-hint">{t("region.hint")}</p>}
         <div className="region-buttons">
           <Button kind="secondary" onClick={handleCancel}>
             {t("action.cancel")}

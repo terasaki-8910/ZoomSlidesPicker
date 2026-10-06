@@ -19,6 +19,12 @@ for (const theme of THEMES) {
 
       expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(0);
 
+      // A long save path is cut off; the button next to it stays one line, as tall as
+      // the shortcut rows' buttons.
+      const pathButton = await page.getByRole("button", { name: "変更…", exact: true }).boundingBox();
+      const shortcutButton = await page.getByRole("button", { name: "変更", exact: true }).first().boundingBox();
+      expect(pathButton && shortcutButton && pathButton.height <= shortcutButton.height + 1).toBe(true);
+
       const results = await runAxe(page);
       expect(results.violations).toEqual([]);
 

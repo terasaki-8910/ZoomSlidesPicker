@@ -49,6 +49,45 @@ for (const theme of THEMES) {
   });
 }
 
+// fit_panel: the panel reports its content height, not the window's, and that height
+// fits the content without scrolling.
+test.describe("panel fit", () => {
+  test.use({ viewport: VIEWPORT, colorScheme: "light" });
+
+  test("panel-fit", async ({ page }) => {
+    const reported = () => page.evaluate(() => Number(document.documentElement.dataset.fitPanel ?? "NaN"));
+    const bodyOverflow = () =>
+      page.evaluate(() => {
+        const body = document.querySelector(".panel-body");
+        return body ? body.scrollHeight - body.clientHeight : Number.NaN;
+      });
+
+    // What the panel should report for the content as rendered right now.
+    const natural = () =>
+      page.evaluate(() => {
+        const header = document.querySelector(".panel-header");
+        const content = document.querySelector(".panel-content");
+        if (!header || !content) return Number.NaN;
+        return Math.ceil(header.getBoundingClientRect().height + content.getBoundingClientRect().height);
+      });
+
+    await page.goto("/?preset=stopped#/panel");
+    await expect(page.getByRole("button", { name: "開始" })).toBeVisible();
+    // The app state arrives after the first render, so wait for the report to catch up.
+    await expect.poll(async () => (await reported()) - (await natural())).toBe(0);
+    const stopped = await reported();
+    expect(stopped).toBeLessThan(VIEWPORT.height);
+
+    await page.setViewportSize({ width: VIEWPORT.width, height: stopped });
+    expect(await bodyOverflow()).toBeLessThanOrEqual(0);
+
+    await page.setViewportSize(VIEWPORT);
+    await page.getByRole("button", { name: "開始" }).click();
+    await page.getByRole("listbox").waitFor();
+    await expect.poll(reported).toBeGreaterThan(stopped);
+  });
+});
+
 // One English-locale smoke check per view type (see also region.spec.ts, settings.spec.ts)
 // so the English strings get at least one real-browser + axe pass too, without doubling
 // every scenario above.

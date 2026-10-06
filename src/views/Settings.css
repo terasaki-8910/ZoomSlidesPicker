@@ -43,6 +43,12 @@
   font-size: var(--font-size-sm);
 }
 
+/* The path gives way (ellipsis); the button keeps its one-line label. */
+.settings-row > .btn {
+  flex: none;
+  white-space: nowrap;
+}
+
 .settings-save-path {
   flex: 1 1 auto;
   min-width: 0;

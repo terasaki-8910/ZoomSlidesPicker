@@ -7,6 +7,11 @@ import react from "@vitejs/plugin-react";
 // the Playwright-driven scripts/ui-check.sh all run without a Tauri host.
 export default defineConfig({
   plugins: [react()],
+  // Matches src-tauri/tauri.conf.json's build.devUrl (docs/impl/shell.md).
+  server: {
+    port: 1420,
+    strictPort: true,
+  },
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],

@@ -178,7 +178,14 @@ function sessionFolderName(): string {
 // ---- module state and pub/sub ------------------------------------------
 
 let appState: AppState = (PRESETS[presetFromLocation()] ?? PRESETS.stopped)();
-let settings: Settings = { language: "auto", saveRoot: "~/Pictures/ZoomSlidesPicker", intervalS: 0.5, shortcuts: defaultShortcuts() };
+// A long, realistic save root (a synced Pictures folder) so the settings row's truncation
+// is exercised by the UI checks.
+let settings: Settings = {
+  language: "auto",
+  saveRoot: "/Users/student/Library/CloudStorage/OneDrive-University/Pictures/ZoomSlidesPicker",
+  intervalS: 0.5,
+  shortcuts: defaultShortcuts(),
+};
 let lastSnapshotWindowId: number = SAMPLE_WINDOWS[0].id;
 
 const appStateListeners = new Set<(s: AppState) => void>();
@@ -362,6 +369,12 @@ export async function openPermissionSettings(): Promise<void> {}
 export async function openSettings(): Promise<void> {}
 
 export async function closeWindow(): Promise<void> {}
+
+// No real panel window to resize outside Tauri (the real backend clamps and resizes it,
+// docs/impl/ipc.md > fit_panel); the last height is left on <html> for the UI checks.
+export async function fitPanel(height: number): Promise<void> {
+  document.documentElement.dataset.fitPanel = String(height);
+}
 
 export async function onAppState(cb: (state: AppState) => void): Promise<UnlistenFn> {
   appStateListeners.add(cb);
