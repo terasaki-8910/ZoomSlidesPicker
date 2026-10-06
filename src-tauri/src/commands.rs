@@ -1,15 +1,17 @@
 //! The `#[tauri::command]` functions (docs/impl/ipc.md). Each is a thin wrapper: the
 //! real logic lives in the module it calls, which the tray menu also calls directly.
-//! Commands that must call a blocking plugin API (dialogs, the macOS permission prompt)
-//! are `async`, so Tauri dispatches them off the main thread (docs/impl/shell.md).
+//! Commands without `async` run on the main thread. These are `async`, so Tauri runs them
+//! on its async runtime instead (docs/impl/shell.md > Threads): the ones that block
+//! (dialogs, the macOS permission prompt, captures, writing a PDF), and `open_settings`,
+//! since creating a window from a synchronous command deadlocks on Windows (WebView2).
 
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::ipc_types::{AppState, RegionSel, Settings, SettingsView, Snapshot, WindowEntry};
 use crate::state::{self, SharedShell};
-use crate::{capture_cmds, session_ctl, session_start, settings, shortcuts, tray, video, windows};
+use crate::{capture_cmds, session_ctl, session_start, settings, shortcuts, ui, video, windows};
 
 #[tauri::command]
 pub fn get_app_state(shell: State<'_, SharedShell>) -> AppState {
@@ -37,7 +39,7 @@ pub fn set_settings(
         crate::settings::view(guard.settings.clone())
     };
     shortcuts::apply(&app);
-    tray::refresh(&app, &shell.lock().unwrap());
+    ui::sync(&app);
     let _ = app.emit("settings", &view);
     Ok(view)
 }
@@ -45,9 +47,9 @@ pub fn set_settings(
 /// Rebuilds the parts outside the webview (tray menu, tooltip, window titles) in the
 /// effective language (docs/recipes/tauri-desktop-app.md gotcha 7).
 #[tauri::command]
-pub fn apply_language(app: AppHandle, shell: State<'_, SharedShell>) {
+pub fn apply_language(app: AppHandle) {
     windows::retitle_all(&app);
-    tray::refresh(&app, &shell.lock().unwrap());
+    ui::sync(&app);
 }
 
 #[tauri::command]
@@ -115,7 +117,7 @@ pub fn open_folder(app: AppHandle) {
 }
 
 #[tauri::command]
-pub fn rebuild_pdf(app: AppHandle) -> Result<usize, String> {
+pub async fn rebuild_pdf(app: AppHandle) -> Result<usize, String> {
     session_ctl::rebuild_pdf(&app)
 }
 
@@ -127,8 +129,7 @@ pub async fn extract_video(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn request_permission(app: AppHandle) -> bool {
     let granted = zsp_capture::permission::request_screen_capture();
-    let shell = app.state::<SharedShell>();
-    state::emit_app_state(&app, &shell.lock().unwrap());
+    ui::sync(&app);
     granted
 }
 
@@ -140,7 +141,7 @@ pub fn open_permission_settings(app: AppHandle) {
 }
 
 #[tauri::command]
-pub fn open_settings(app: AppHandle) {
+pub async fn open_settings(app: AppHandle) {
     windows::open_settings(&app);
 }
 

@@ -13,12 +13,16 @@ use crate::state::SharedShell;
 const RETRY_ATTEMPTS: u32 = 10;
 const RETRY_DELAY: Duration = Duration::from_millis(300);
 
-/// Runs once at startup, from `setup()`.
-pub fn run(app: &AppHandle) {
+/// Called once from `setup()`; does its work on another thread (finding the window may
+/// take a few seconds of retries).
+pub fn spawn(app: AppHandle) {
     let Ok(title_substr) = env::var("ZSP_AUTOSTART_TITLE") else {
         return;
     };
+    thread::spawn(move || run(&app, &title_substr));
+}
 
+fn run(app: &AppHandle, title_substr: &str) {
     if let Ok(root) = env::var("ZSP_SAVE_ROOT") {
         app.state::<SharedShell>()
             .lock()
@@ -27,7 +31,7 @@ pub fn run(app: &AppHandle) {
             .save_root = root;
     }
 
-    let Some(window_id) = find_window(&title_substr) else {
+    let Some(window_id) = find_window(title_substr) else {
         eprintln!(
             "ZSP_AUTOSTART_TITLE={title_substr:?}: no matching window found after {RETRY_ATTEMPTS} attempts"
         );

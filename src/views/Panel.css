@@ -21,9 +21,15 @@
   color: var(--color-text-secondary);
 }
 
+/* Natural height, so the panel can report it (fit_panel); it shrinks and scrolls only
+   when the content is taller than the window's 640 px cap. */
 .panel-body {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  min-height: 0;
   overflow-y: auto;
+}
+
+.panel-content {
   padding: var(--space-md);
 }
 

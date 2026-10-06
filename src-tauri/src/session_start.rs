@@ -13,11 +13,12 @@ use zsp_session::{Session, WindowSource};
 
 use crate::ipc_types::{RegionSel, SourceKind};
 use crate::state::{self, ActiveSession, SharedShell};
-use crate::{i18n, notify, settings, tray, windows};
+use crate::{i18n, notify, settings, ui, windows};
 
 /// Starts a window-sourced session (docs/impl/ipc.md > start_session): validates the
-/// region, closes the region window, then requires no session already running and (on
-/// macOS) Screen Recording permission before spawning and notifying.
+/// region, requires no session already running and (on macOS) Screen Recording
+/// permission, spawns the session, then closes the region window and notifies. On an
+/// error the region window stays open so it can show the message.
 pub fn start<R: Runtime>(
     app: &AppHandle<R>,
     window_id: u32,
@@ -30,9 +31,10 @@ pub fn start<R: Runtime>(
         h: region_sel.h,
     };
     region.validate()?;
-    windows::close_region(app);
 
     let shell_state = app.state::<SharedShell>();
+    // Held from the "no session yet" check until the new session is stored, so two starts
+    // cannot both pass the check. Nothing below waits for the main thread.
     let mut shell = shell_state.lock().unwrap();
     let lang = settings::effective_language(shell.settings.language);
 
@@ -70,7 +72,8 @@ pub fn start<R: Runtime>(
     };
 
     let writer = SessionWriter::create(&root, chrono::Local::now(), meta)
-        .map_err(|e| i18n::error_capture_failed(lang, &e.to_string()))?;
+        .map_err(|e| i18n::error_save_folder(lang, &e.to_string()))?;
+    let dir = writer.dir().to_path_buf();
     let session = Session::new(
         writer,
         zsp_detect::Config {
@@ -89,16 +92,17 @@ pub fn start<R: Runtime>(
 
     shell.session = Some(ActiveSession {
         handle,
+        dir,
         source_kind: SourceKind::Window,
         source_title: info.title,
         interval_s,
         thumb: None,
         video_total_frames: None,
     });
-    state::emit_app_state(app, &shell);
-    tray::refresh(app, &shell);
     drop(shell);
 
+    windows::close_region(app);
+    ui::sync(app);
     notify::notify_started(app, lang);
     Ok(())
 }

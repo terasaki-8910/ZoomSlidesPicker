@@ -8,7 +8,7 @@ use tauri_plugin_opener::OpenerExt;
 use zsp_session::Control;
 
 use crate::state::SharedShell;
-use crate::{i18n, settings, state, tray};
+use crate::{i18n, settings, ui};
 
 fn send_control<R: Runtime>(app: &AppHandle<R>, control: Control) {
     let shell = app.state::<SharedShell>();
@@ -61,29 +61,44 @@ pub fn open_folder<R: Runtime>(app: &AppHandle<R>) {
 
 /// `rebuild_pdf`: rebuilds the last session's PDF from the images still in its folder
 /// and returns the page count (docs/impl/ipc.md). Errors when there is no last session
-/// or it has no images left.
+/// or it has no images left. Slow with many pages, so callers run it off the main thread;
+/// the shell lock is not held while the PDF is written.
 pub fn rebuild_pdf<R: Runtime>(app: &AppHandle<R>) -> Result<usize, String> {
     let shell_state = app.state::<SharedShell>();
-    let mut shell = shell_state.lock().unwrap();
-    let lang = settings::effective_language(shell.settings.language);
-
-    let Some(last) = shell.last_session.as_ref() else {
-        return Err(i18n::error_no_last_session_images(lang).to_string());
+    let (dir, lang) = {
+        let shell = shell_state.lock().unwrap();
+        let lang = settings::effective_language(shell.settings.language);
+        let Some(last) = shell.last_session.as_ref() else {
+            return Err(i18n::error_no_last_session_images(lang).to_string());
+        };
+        (last.dir.clone(), lang)
     };
-    let dir = last.dir.clone();
-    let pages = zsp_output::rebuild_pdf(&dir, chrono::Local::now())
-        .map_err(|_| i18n::error_no_last_session_images(lang).to_string())?;
 
-    if let Some(l) = shell.last_session.as_mut() {
-        l.has_pdf = true;
+    let pages = zsp_output::rebuild_pdf(&dir, chrono::Local::now()).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::InvalidInput {
+            i18n::error_no_last_session_images(lang).to_string()
+        } else {
+            i18n::error_save_folder(lang, &e.to_string())
+        }
+    })?;
+
+    {
+        let mut shell = shell_state.lock().unwrap();
+        if let Some(last) = shell.last_session.as_mut()
+            && last.dir == dir
+        {
+            last.count = pages;
+            last.has_pdf = true;
+        }
     }
-    state::emit_app_state(app, &shell);
-    tray::refresh(app, &shell);
+    ui::sync(app);
     Ok(pages)
 }
 
-/// The tray menu's "PDF を作り直す": same as the command, but with nowhere to show the
-/// result or an error, so both are simply dropped.
-pub fn rebuild_pdf_from_menu<R: Runtime>(app: &AppHandle<R>) {
-    let _ = rebuild_pdf(app);
+/// The tray menu's "PDF を作り直す": same as the command, moved off the main thread
+/// (where menu events arrive), with nowhere to show the result or an error.
+pub fn rebuild_pdf_from_menu<R: Runtime>(app: AppHandle<R>) {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _ = rebuild_pdf(&app);
+    });
 }

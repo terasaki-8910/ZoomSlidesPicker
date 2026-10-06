@@ -1,12 +1,12 @@
 //! Central shared state (docs/impl/shell.md): the active session (if any), the last
 //! finished session, and everything needed to answer `get_app_state` and rebuild the
 //! tray. Behind one `Mutex` -- commands, the notify callback (which runs on the session
-//! thread), and the periodic ticker all touch it.
+//! thread), and the periodic ticker all touch it. Never hold it while calling the tray
+//! or anything else that waits for the main thread (`ui.rs`).
 
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use tauri::{AppHandle, Emitter, Runtime};
 use zsp_session::EngineHandle;
 
 use crate::ipc_types::{
@@ -15,6 +15,8 @@ use crate::ipc_types::{
 
 pub struct ActiveSession {
     pub handle: EngineHandle,
+    /// The session folder; tells this session's notices apart from an older one's.
+    pub dir: PathBuf,
     pub source_kind: SourceKind,
     pub source_title: String,
     /// The interval this session was started with (settings can change while it runs;
@@ -131,12 +133,4 @@ pub fn snapshot(shell: &Shell) -> AppState {
         permission,
         video_progress,
     }
-}
-
-/// Emits the current `AppState` to every window (docs/impl/ipc.md > Events). Called
-/// after every state change: session control, settings load, and -- while a session
-/// runs -- at least once a second by the ticker (docs/impl/shell.md > Behaviour).
-pub fn emit_app_state<R: Runtime>(app: &AppHandle<R>, shell: &Shell) {
-    let state = snapshot(shell);
-    let _ = app.emit("app-state", state);
 }

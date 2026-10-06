@@ -14,6 +14,7 @@ mod shortcuts;
 mod state;
 mod thumb;
 mod tray;
+mod ui;
 mod video;
 mod windows;
 
@@ -49,13 +50,10 @@ pub fn run() {
             let handle = app.handle().clone();
             tray::build(&handle)?;
             shortcuts::apply(&handle);
-            {
-                let shell = handle.state::<SharedShell>();
-                tray::refresh(&handle, &shell.lock().unwrap());
-            }
+            ui::sync(&handle);
 
             start_ticker(handle.clone());
-            autostart::run(&handle);
+            autostart::spawn(handle);
 
             Ok(())
         })
@@ -87,68 +85,58 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building the tauri application");
 
-    app.run(|app_handle, event| {
-        // This app has no main window: closing the last window must not quit it (it
-        // lives in the tray with zero windows open). `code` is None exactly when the
-        // exit was requested that way (the last window closing) and Some when it was
-        // requested programmatically (AppHandle::exit, called only by the Quit menu
-        // item and the ZSP_AUTOSTART_SECONDS test hook) -- only the latter should
-        // actually proceed, after stopping and joining any running session so its PDF
-        // is written before the process exits (docs/impl/shell.md > Behaviour).
-        //
-        // We always drive the actual exit ourselves (`stop_and_join`, below) rather than
-        // letting the runtime's own exit machinery finish the job after this callback
-        // returns: that path was observed empirically (the D1 smoke test) to never
-        // complete for this accessory-policy, often-zero-window app, so every branch
-        // below calls `prevent_exit`.
-        if let RunEvent::ExitRequested { code, api, .. } = event {
-            api.prevent_exit();
-            if let Some(code) = code {
-                stop_and_join(app_handle, code);
+    app.run(|app_handle, event| match event {
+        // The last window closed. This app lives in the tray with no window open, so it
+        // stays (SPEC.md > 使い方の流れ).
+        RunEvent::ExitRequested {
+            code: None, api, ..
+        } => api.prevent_exit(),
+        // Quit (the tray menu, or the ZSP_AUTOSTART_SECONDS test hook): stop a running
+        // session first and exit once its PDF is written (docs/impl/shell.md >
+        // Behaviour). The wait happens on another thread so the tray keeps working; that
+        // thread asks to exit again, and with no session left the exit goes ahead.
+        RunEvent::ExitRequested {
+            code: Some(code),
+            api,
+            ..
+        } => {
+            if let Some(active) = take_session(app_handle) {
+                api.prevent_exit();
+                active.handle.send(zsp_session::Control::Stop);
+                let app = app_handle.clone();
+                thread::spawn(move || {
+                    let _ = active.handle.join();
+                    app.exit(code);
+                });
             }
         }
+        // Exiting without a request first (for example the OS logging out): finish a
+        // running session here. Blocking the main thread is safe: the session thread
+        // never waits for it (ui.rs).
+        RunEvent::Exit => {
+            if let Some(active) = take_session(app_handle) {
+                active.handle.send(zsp_session::Control::Stop);
+                let _ = active.handle.join();
+            }
+        }
+        _ => {}
     });
 }
 
-/// Emits `app-state` at least once a second while a session runs (docs/impl/shell.md >
-/// Behaviour: elapsed time). A no-op tick when there is none.
+fn take_session(app: &AppHandle) -> Option<state::ActiveSession> {
+    app.state::<SharedShell>().lock().unwrap().session.take()
+}
+
+/// Updates `app-state` (elapsed time) and the tray at least once a second while a
+/// session runs (docs/impl/shell.md > Behaviour).
 fn start_ticker(app: AppHandle) {
     thread::spawn(move || {
         loop {
             thread::sleep(Duration::from_secs(1));
-            let shell = app.state::<SharedShell>();
-            let guard = shell.lock().unwrap();
-            if guard.session.is_some() {
-                state::emit_app_state(&app, &guard);
-                tray::refresh(&app, &guard);
+            let running = app.state::<SharedShell>().lock().unwrap().session.is_some();
+            if running {
+                ui::sync(&app);
             }
         }
-    });
-}
-
-/// Stops a running session and exits once its thread has fully ended, so the PDF is
-/// written before the process exits (docs/impl/shell.md > Behaviour: on quit).
-///
-/// Takes the session out of the shared state up front (so the session thread's own
-/// notify callback, which re-locks that same state to record it finished, never
-/// contends with this function for it), then joins and exits on a **separate** thread
-/// rather than this one (the main thread, here). Joining right on the main thread was
-/// tried first and deadlocks: that notify callback also refreshes the tray, which on
-/// macOS must run on the main thread, so a main thread blocked in `join()` can never
-/// service it and the session thread (and so the join) never completes. Freeing the
-/// main thread to keep servicing that dispatch while a different thread waits avoids
-/// the deadlock; process::exit works from any thread once the wait is over.
-fn stop_and_join(app: &AppHandle, code: i32) {
-    let active = {
-        let shell = app.state::<SharedShell>();
-        shell.lock().unwrap().session.take()
-    };
-    let Some(active) = active else {
-        std::process::exit(code);
-    };
-    active.handle.send(zsp_session::Control::Stop);
-    thread::spawn(move || {
-        let _ = active.handle.join();
-        std::process::exit(code);
     });
 }

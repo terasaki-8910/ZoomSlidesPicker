@@ -11,7 +11,7 @@ use zsp_session::{Session, VideoSource};
 
 use crate::ipc_types::{Lang, SourceKind};
 use crate::state::{self, ActiveSession, SharedShell};
-use crate::{i18n, notify, settings, tray};
+use crate::{i18n, notify, settings, ui};
 
 /// `ffprobe -v error -show_entries format=duration -of csv=p=0 <file>`: the container
 /// duration in seconds, when ffprobe can report one (docs/impl/shell.md: "when
@@ -59,20 +59,32 @@ pub fn extract_video<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let Some(file_path) = picked else {
         return Ok(()); // the user closed the dialog without choosing a file
     };
-    let path = file_path.into_path().map_err(|e| e.to_string())?;
+    let path = file_path
+        .into_path()
+        .map_err(|e| i18n::error_video_open(lang, &e.to_string()))?;
     let file_name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
 
+    // ffprobe and ffmpeg start outside the shell lock.
+    let interval_s = app
+        .state::<SharedShell>()
+        .lock()
+        .unwrap()
+        .settings
+        .interval_s;
+    let total_frames = probe_duration_s(&path).map(|d| ((d / interval_s).floor() as u64) + 1);
+    let source = VideoSource::open(&path, interval_s)
+        .map_err(|e| i18n::error_video_open(lang, &e.to_string()))?;
+
     let shell_state = app.state::<SharedShell>();
+    // Held from the "no session yet" check until the new session is stored (as in
+    // session_start). Nothing below waits for the main thread.
     let mut shell = shell_state.lock().unwrap();
     if shell.session.is_some() {
         return Err(i18n::error_session_already_running(lang).to_string());
     }
-
-    let interval_s = shell.settings.interval_s;
-    let total_frames = probe_duration_s(&path).map(|d| ((d / interval_s).floor() as u64) + 1);
 
     let root = PathBuf::from(&shell.settings.save_root);
     let meta = SessionMeta {
@@ -87,8 +99,9 @@ pub fn extract_video<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
         region: None, // full frame (SPEC.md: no region UI in mp4 mode)
         interval_s,
     };
-    let writer =
-        SessionWriter::create(&root, chrono::Local::now(), meta).map_err(|e| e.to_string())?;
+    let writer = SessionWriter::create(&root, chrono::Local::now(), meta)
+        .map_err(|e| i18n::error_save_folder(lang, &e.to_string()))?;
+    let dir = writer.dir().to_path_buf();
     let session = Session::new(
         writer,
         zsp_detect::Config {
@@ -97,7 +110,6 @@ pub fn extract_video<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
         },
         Box::new(OsTrash),
     );
-    let source = VideoSource::open(&path, interval_s).map_err(|e| e.to_string())?;
     let handle = zsp_session::spawn(
         Box::new(source),
         session,
@@ -107,25 +119,25 @@ pub fn extract_video<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
 
     shell.session = Some(ActiveSession {
         handle,
+        dir,
         source_kind: SourceKind::Mp4,
         source_title: file_name,
         interval_s,
         thumb: None,
         video_total_frames: total_frames,
     });
-    state::emit_app_state(app, &shell);
-    tray::refresh(app, &shell);
     drop(shell);
 
+    ui::sync(app);
     notify::notify_started(app, lang);
     Ok(())
 }
 
 /// The tray menu's "動画ファイルから抽出…": same as the command, but with nowhere to
-/// show an error, and dispatched onto a background task since the menu-event callback
-/// itself runs on the main thread (the dialog's blocking API must not run there).
+/// show an error, and moved off the main thread (where menu events arrive) since the
+/// dialog's blocking API must not run there.
 pub fn extract_video_from_menu<R: Runtime>(app: AppHandle<R>) {
-    tauri::async_runtime::spawn(async move {
+    tauri::async_runtime::spawn_blocking(move || {
         let _ = extract_video(&app);
     });
 }

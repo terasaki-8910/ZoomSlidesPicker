@@ -117,3 +117,43 @@ pub fn validate(settings: &Settings, lang: Lang) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn with(interval_s: f64, save_now: &str) -> Settings {
+        let mut s = default_settings();
+        s.interval_s = interval_s;
+        s.shortcuts.save_now = save_now.to_string();
+        s
+    }
+
+    #[test]
+    fn defaults_are_valid() {
+        assert_eq!(validate(&default_settings(), Lang::En), Ok(()));
+    }
+
+    #[test]
+    fn interval_is_half_second_steps_from_half_to_five() {
+        let ok = default_shortcuts().save_now;
+        for v in [0.5, 1.0, 2.5, 5.0] {
+            assert_eq!(validate(&with(v, &ok), Lang::En), Ok(()), "{v}");
+        }
+        for v in [0.0, 0.25, 0.75, 5.5, f64::NAN] {
+            assert_eq!(
+                validate(&with(v, &ok), Lang::Ja),
+                Err(i18n::error_interval_range(Lang::Ja).to_string()),
+                "{v}"
+            );
+        }
+    }
+
+    #[test]
+    fn shortcuts_must_parse() {
+        assert_eq!(
+            validate(&with(0.5, "Control+Nope+S"), Lang::En),
+            Err(i18n::error_shortcut_invalid(Lang::En).to_string())
+        );
+    }
+}

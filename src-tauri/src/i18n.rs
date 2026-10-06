@@ -119,11 +119,15 @@ pub fn notify_start_body(lang: Lang) -> &'static str {
     }
 }
 
-/// design_brief.md > 通知（停止）, verbatim.
+/// design_brief.md > 通知（停止）, verbatim. With no captures there is no PDF
+/// (zsp-output writes none), so that case gets its own line, which design_brief.md does
+/// not cover.
 pub fn notify_stop_body(lang: Lang, count: usize) -> String {
-    match lang {
-        Lang::Ja => format!("{count} 枚を保存し、PDF を作りました。"),
-        Lang::En => format!("Saved {count} slides and created a PDF."),
+    match (lang, count) {
+        (Lang::Ja, 0) => "保存したスライドはありません。".to_string(),
+        (Lang::En, 0) => "No slides were saved.".to_string(),
+        (Lang::Ja, _) => format!("{count} 枚を保存し、PDF を作りました。"),
+        (Lang::En, _) => format!("Saved {count} slides and created a PDF."),
     }
 }
 
@@ -203,6 +207,23 @@ pub fn error_ffmpeg_missing(lang: Lang) -> &'static str {
     match lang {
         Lang::Ja => "ffmpeg が見つかりません。インストールしてから、もう一度お試しください。",
         Lang::En => "ffmpeg was not found. Install it and try again.",
+    }
+}
+
+/// Starting a session: the session folder could not be created under the save root (a
+/// removed drive, no write access). Not covered by design_brief.md.
+pub fn error_save_folder(lang: Lang, detail: &str) -> String {
+    match lang {
+        Lang::Ja => format!("保存先に書き込めません：{detail}"),
+        Lang::En => format!("Can't write to the save folder: {detail}"),
+    }
+}
+
+/// `extract_video`: ffmpeg could not open the chosen file. Not covered by design_brief.md.
+pub fn error_video_open(lang: Lang, detail: &str) -> String {
+    match lang {
+        Lang::Ja => format!("動画を読み込めません：{detail}"),
+        Lang::En => format!("Can't read the video: {detail}"),
     }
 }
 

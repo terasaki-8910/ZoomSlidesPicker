@@ -69,6 +69,9 @@ pub enum Notice {
     },
     /// A single-colour stretch reached 10 s (reported once per stretch).
     Blank,
+    /// Paused by [`Control::Pause`] (a lost window reports [`Notice::WindowLost`] instead).
+    Paused,
+    Resumed,
     WindowLost,
     WindowBack,
     Finished {
@@ -168,8 +171,9 @@ impl Session {
     }
 
     /// Apply a control at session time `t`.
-    /// - `Pause`: detector pause, drop the held frame, record `paused`.
-    /// - `Resume`: detector resume at `t`, record `resumed`, clear `window_lost`.
+    /// - `Pause`: detector pause, drop the held frame, record `paused` ([`Notice::Paused`]).
+    /// - `Resume`: detector resume at `t`, record `resumed`, clear `window_lost`
+    ///   ([`Notice::Resumed`]).
     /// - `SaveNow` (running, with a latest frame): manual save of the latest frame.
     /// - `Undo` (running or paused): undo the latest capture in the detector and move its PNG
     ///   to the trash ([`Notice::Undone`]). After finishing it does nothing (the PDF exists).
@@ -187,7 +191,7 @@ impl Session {
                 self.held = None;
                 self.state = State::Paused;
                 self.writer.add_event(t, EventKind::Paused)?;
-                Ok(Vec::new())
+                Ok(vec![Notice::Paused])
             }
             Control::Resume => {
                 if self.state != State::Paused {
@@ -197,7 +201,7 @@ impl Session {
                 self.state = State::Running;
                 self.window_lost = false;
                 self.writer.add_event(t, EventKind::Resumed)?;
-                Ok(Vec::new())
+                Ok(vec![Notice::Resumed])
             }
             Control::SaveNow => {
                 if self.state != State::Running {
