@@ -1,0 +1,84 @@
+/*
+ * Design tokens -- the only file allowed to contain colour literals
+ * (scripts/lint-text.mjs enforces this). Everything else references these
+ * custom properties.
+ *
+ * Palette: pure-grey neutrals (no hue tint, even in the near-black/near-white
+ * values -- see ~/.claude/rules/ui.md), one restrained accent (a quiet,
+ * desaturated steel blue -- this app runs silently in the background during a
+ * lecture, design_brief.md's "目立たないことを優先する", so the accent should
+ * read as calm/utilitarian rather than draw attention), and a danger colour
+ * used only for errors and warnings (design_brief.md: never for the
+ * "recording" state itself). Light/dark pairs were chosen and then checked
+ * against WCAG AA (4.5:1 for text, see the report for the exact ratios) --
+ * every text/background pairing below passes with margin.
+ */
+:root {
+  /* Neutrals */
+  --color-bg: #ffffff;
+  --color-bg-elevated: #f3f3f3;
+  --color-text: #1a1a1a;
+  --color-text-secondary: #595959;
+  --color-border: #d9d9d9;
+
+  /* Accent (one, restrained) */
+  --color-accent: #2f6690;
+  --color-accent-hover: #27516f;
+  --color-on-accent: #ffffff;
+
+  /* Danger -- errors and warnings only; never the running/recording state */
+  --color-danger: #a83428;
+  --color-danger-bg: #fbebe9;
+
+  /* Overlay for the region selector (darkens everything outside the
+     selection; needs alpha, so it lives here rather than in component CSS) */
+  --overlay-dim: rgba(0, 0, 0, 0.55);
+
+  --color-focus-ring: var(--color-accent);
+  --color-shadow: rgba(0, 0, 0, 0.18);
+
+  /* Type -- system fonts, small fixed scale */
+  --font-sans:
+    -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Segoe UI",
+    sans-serif;
+  /* For Latin/symbol-only text (the mac modifier glyphs -- Control/Option/Command --
+     and Windows/Linux's "Ctrl+Alt+Shift+S" notation): skips the CJK fonts above, which
+     can otherwise supply the wrong glyph for the Unicode "Miscellaneous Technical"
+     symbols those modifier characters come from. */
+  --font-sans-symbols: -apple-system, system-ui, "Segoe UI", sans-serif;
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 17px;
+  --font-size-xl: 20px;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #1c1c1c;
+    --color-bg-elevated: #262626;
+    --color-text: #f0f0f0;
+    --color-text-secondary: #b0b0b0;
+    --color-border: #444444;
+
+    --color-accent: #7eb0da;
+    --color-accent-hover: #9cc4e3;
+    --color-on-accent: #1c1c1c;
+
+    --color-danger: #e68a7c;
+    --color-danger-bg: #3a2321;
+
+    --overlay-dim: rgba(0, 0, 0, 0.6);
+    --color-shadow: rgba(0, 0, 0, 0.5);
+  }
+}

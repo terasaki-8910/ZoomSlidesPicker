@@ -1,0 +1,23 @@
+overrides:
+  # vitest's own transitive deps (@vitest/mocker, vite-node) otherwise resolve a
+  # slightly older vite patch than @vitejs/plugin-react does, installing two copies
+  # whose Plugin types are nominally incompatible (breaks `tsc -b` on vite.config.ts).
+  vite: ^7.3.7
+allowBuilds:
+  # esbuild's postinstall just selects its own prebuilt native binary for this
+  # platform -- vite/vitest/playwright all need it to run at all.
+  esbuild: true
+minimumReleaseAgeExclude:
+  - '@typescript-eslint/eslint-plugin@8.71.1'
+  - '@typescript-eslint/parser@8.71.1'
+  - '@typescript-eslint/project-service@8.71.1'
+  - '@typescript-eslint/scope-manager@8.71.1'
+  - '@typescript-eslint/tsconfig-utils@8.71.1'
+  - '@typescript-eslint/type-utils@8.71.1'
+  - '@typescript-eslint/types@8.71.1'
+  - '@typescript-eslint/typescript-estree@8.71.1'
+  - '@typescript-eslint/utils@8.71.1'
+  - '@typescript-eslint/visitor-keys@8.71.1'
+  - axe-core@4.14.0
+  - typescript-eslint@8.71.1
+  - vite@7.3.7
