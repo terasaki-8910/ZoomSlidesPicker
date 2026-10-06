@@ -27,6 +27,16 @@ docs/recipes/tauri-desktop-app.md (gotchas 3, 4, 7 apply).
   transparent, 32 x 32 and 64 x 64). Generate the bundle icons with `pnpm tauri icon`.
   Commit the outputs.
 
+## Frontend touch points
+
+The React UI is done (`src/`, running on `src/ipc/mock.ts` until now). Two small changes
+belong to this task because they span both sides:
+- `vite.config.ts`: `server: { port: 1420, strictPort: true }`, matching `devUrl`.
+- `fit_panel` (docs/impl/ipc.md): add the wrapper to `src/ipc/index.ts` (no-op in the mock),
+  and make the panel view report its content height with a `ResizeObserver` on its root
+  element. The panel window is otherwise a fixed 480 px and mostly empty when stopped.
+After these, `pnpm lint`, `pnpm test`, and `sh scripts/ui-check.sh` must still pass.
+
 ## Behaviour
 
 - macOS: `ActivationPolicy::Accessory` (no Dock icon).

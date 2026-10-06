@@ -114,6 +114,7 @@ returned as a string message (in the effective language) and shown by the UI as 
 | `open_permission_settings` | | | macOS: opens the Screen Recording page of System Settings. |
 | `open_settings` | | | Opens or focuses the settings window. |
 | `close_window` | | | Closes the calling window. |
+| `fit_panel` | `height: number` | | The panel reports its content height in CSS pixels (on mount and whenever it changes); Rust resizes the panel window to that height (clamped to 160-640, width stays 320) and keeps it at the tray icon. Ignored for other windows. |
 
 ## Events (Rust -> all windows)
 
