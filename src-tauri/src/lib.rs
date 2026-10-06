@@ -110,6 +110,10 @@ pub fn run() {
                 });
             }
         }
+        // macOS: the app was opened again (Finder, Spotlight, `open`) while running. Open
+        // the panel, since the menu bar may have no room left to show the tray icon.
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => windows::open_panel(app_handle),
         // Exiting without a request first (for example the OS logging out): finish a
         // running session here. Blocking the main thread is safe: the session thread
         // never waits for it (ui.rs).

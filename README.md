@@ -18,7 +18,7 @@
 
 ## 使い方
 
-1. 起動すると、メニューバー（Windows は通知領域）にアイコンだけが出る。Mac では Dock に出ない。
+1. 起動すると、メニューバー（Windows は通知領域）にアイコンだけが出る。Mac では Dock に出ない。メニューバーが混んでいてアイコンが見えないとき（ノッチの裏に隠れるなど）は、アプリをもう一度起動するとパネルが画面の中央に開く。
 2. アイコンを押してパネルを開き、「開始」を押す。授業の窓を選ぶ。
 3. 選んだ窓の画像の上で、スライドの部分をドラッグで囲み、Enter（または「開始」）。囲まずに Enter を押すと窓全体。
 4. 授業の間は放っておいてよい。保存した枚数はアイコンの横（Windows はツールチップ）に出る。
@@ -84,7 +84,8 @@ pnpm tauri build             # 配布物（macOS は .app と .dmg）
 |---|---|
 | `ZSP_AUTOSTART_TITLE` | 起動時に、題名にこの文字列を含む窓で記録を始める（窓全体） |
 | `ZSP_AUTOSTART_SECONDS` | その秒数で停止して終了する |
-| `ZSP_SAVE_ROOT` | 保存先を差し替える |
+| `ZSP_SAVE_ROOT` | 保存先を差し替える（設定には書かない） |
+| `ZSP_OPEN_WINDOW` | 起動時に `panel`、`settings`、`region` の窓を開く。`region` は `ZSP_AUTOSTART_TITLE` の窓を使い、記録は始めない |
 
 fixture の作り直し（`samples/fixture/fixture.py` を変えたときだけ）:
 
