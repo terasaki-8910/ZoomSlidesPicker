@@ -12,3 +12,6 @@ coverage/
 .env
 .env.*
 !.env.example
+samples/fixture/out/
+samples/proto/out/
+samples/proto/report.json
