@@ -178,7 +178,14 @@ function sessionFolderName(): string {
 // ---- module state and pub/sub ------------------------------------------
 
 let appState: AppState = (PRESETS[presetFromLocation()] ?? PRESETS.stopped)();
-let settings: Settings = { language: "auto", saveRoot: "~/Pictures/ZoomSlidesPicker", intervalS: 0.5, shortcuts: defaultShortcuts() };
+// A long, realistic save root (a synced Pictures folder) so the settings row's truncation
+// is exercised by the UI checks.
+let settings: Settings = {
+  language: "auto",
+  saveRoot: "/Users/student/Library/CloudStorage/OneDrive-University/Pictures/ZoomSlidesPicker",
+  intervalS: 0.5,
+  shortcuts: defaultShortcuts(),
+};
 let lastSnapshotWindowId: number = SAMPLE_WINDOWS[0].id;
 
 const appStateListeners = new Set<(s: AppState) => void>();
