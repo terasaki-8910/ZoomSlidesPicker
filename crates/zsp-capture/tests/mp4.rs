@@ -43,13 +43,24 @@ fn b8_mp4_mode_matches_f1() {
     assert_eq!(n, 176, "decoded frames");
 
     let expected: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(root.join("expected.json")).unwrap()).unwrap();
+        serde_json::from_str(&std::fs::read_to_string(root.join("expected.json")).unwrap())
+            .unwrap();
     let windows = expected["F1"]["saves"].as_array().unwrap();
     assert_eq!(saves.len(), windows.len(), "saves {saves:?}");
     for w in windows {
-        let (from, to) = (w["from"].as_f64().unwrap() - 0.5, w["to"].as_f64().unwrap() + 0.5);
+        let (from, to) = (
+            w["from"].as_f64().unwrap() - 0.5,
+            w["to"].as_f64().unwrap() + 0.5,
+        );
         let hits = saves.iter().filter(|t| from <= **t && **t <= to).count();
-        assert_eq!(hits, 1, "one save for {} in [{from}, {to}], got {saves:?}", w["label"]);
+        assert_eq!(
+            hits, 1,
+            "one save for {} in [{from}, {to}], got {saves:?}",
+            w["label"]
+        );
     }
-    assert_eq!(revisits, expected["F1"]["revisits"].as_u64().unwrap() as usize);
+    assert_eq!(
+        revisits,
+        expected["F1"]["revisits"].as_u64().unwrap() as usize
+    );
 }
