@@ -7,10 +7,14 @@
 //! - `slides.pdf`: one page per capture in order, page size = image size (1 px = 1 pt),
 //!   images embedded losslessly (8-bit RGB, Flate)
 
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, SecondsFormat};
+use image::RgbImage;
+use miniz_oxide::deflate::{CompressionLevel, compress_to_vec_zlib};
+use pdf_writer::{Content, Filter, Finish, Name, Pdf, Rect, Ref};
 use serde::{Deserialize, Serialize};
 
 pub const SESSION_FILE: &str = "session.json";
@@ -128,23 +132,37 @@ pub struct SessionMeta {
 
 /// Folder name for a session started at `started`: `YYYY-MM-DD_HHMM` (local time).
 pub fn session_dir_name(started: &DateTime<Local>) -> String {
-    let _ = started;
-    todo!()
+    started.format("%Y-%m-%d_%H%M").to_string()
 }
 
 /// Create the session folder under `root` (creating `root` if needed). When the name is
 /// taken, append `-2`, `-3`, ... Returns the created folder.
 pub fn create_session_dir(root: &Path, started: &DateTime<Local>) -> io::Result<PathBuf> {
-    let _ = (root, started);
-    todo!()
+    fs::create_dir_all(root)?;
+    let base = session_dir_name(started);
+    let mut candidate = root.join(&base);
+    let mut suffix = 2;
+    loop {
+        match fs::create_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                candidate = root.join(format!("{base}-{suffix}"));
+                suffix += 1;
+            }
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 /// `NNN_hh-mm-ss.png`: index zero-padded to 3 digits (more digits from 1000), and
 /// `t_content` (seconds since the session start) floored to whole seconds as hours,
 /// minutes, seconds, each two digits. Example: (12, 3725.4) -> "012_01-02-05.png".
 pub fn capture_file_name(index: usize, t_content: f64) -> String {
-    let _ = (index, t_content);
-    todo!()
+    let total_seconds = t_content.floor() as u64;
+    let h = total_seconds / 3600;
+    let m = (total_seconds % 3600) / 60;
+    let s = total_seconds % 60;
+    format!("{index:03}_{h:02}-{m:02}-{s:02}.png")
 }
 
 /// Where undone captures go. The app uses [`OsTrash`]; tests use a folder.
@@ -157,9 +175,34 @@ pub struct OsTrash;
 
 impl Trash for OsTrash {
     fn trash(&self, path: &Path) -> io::Result<()> {
-        let _ = path;
-        todo!()
+        trash::delete(path).map_err(io::Error::other)
     }
+}
+
+/// Drops the alpha channel of an RGBA8 buffer, keeping pixel order.
+fn rgba_to_rgb(rgba: &[u8]) -> Vec<u8> {
+    rgba.chunks_exact(4)
+        .flat_map(|p| [p[0], p[1], p[2]])
+        .collect()
+}
+
+/// Writes `data` to `path` atomically: a temp file next to `path`, then a rename over it.
+/// Leaves no temp file behind on success.
+fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
+    let mut tmp_name = path
+        .file_name()
+        .expect("path has a file name")
+        .to_os_string();
+    tmp_name.push(".tmp");
+    let tmp = path.with_file_name(tmp_name);
+    fs::write(&tmp, data)?;
+    fs::rename(&tmp, path)
+}
+
+/// Rewrites `dir`/session.json atomically from `file`.
+fn write_session_json(dir: &Path, file: &SessionFile) -> io::Result<()> {
+    let data = serde_json::to_string_pretty(file).map_err(io::Error::other)?;
+    write_atomic(&dir.join(SESSION_FILE), data.as_bytes())
 }
 
 /// Writes one session's folder. Every mutating call rewrites session.json atomically.
@@ -172,8 +215,24 @@ impl SessionWriter {
     /// Create the session folder and write the initial session.json
     /// (`ended_at` null, `pdf` null, empty lists).
     pub fn create(root: &Path, started: DateTime<Local>, meta: SessionMeta) -> io::Result<Self> {
-        let _ = (root, started, meta);
-        todo!()
+        let dir = create_session_dir(root, &started)?;
+        let file = SessionFile {
+            schema: 1,
+            app_version: meta.app_version,
+            started_at: started.to_rfc3339_opts(SecondsFormat::Secs, false),
+            ended_at: None,
+            source: meta.source,
+            region: meta.region,
+            settings: Settings {
+                interval_s: meta.interval_s,
+            },
+            captures: Vec::new(),
+            revisits: Vec::new(),
+            events: Vec::new(),
+            pdf: None,
+        };
+        write_session_json(&dir, &file)?;
+        Ok(Self { dir, file })
     }
 
     pub fn dir(&self) -> &Path {
@@ -201,32 +260,86 @@ impl SessionWriter {
         t_saved: f64,
         reason: CaptureReason,
     ) -> io::Result<PathBuf> {
-        let _ = (index, rgba, width, height, t_content, t_saved, reason);
-        todo!()
+        let name = capture_file_name(index, t_content);
+        let path = self.dir.join(&name);
+
+        let rgb = rgba_to_rgb(rgba);
+        let image = RgbImage::from_raw(width, height, rgb).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "rgba buffer does not match width * height",
+            )
+        })?;
+        image.save(&path).map_err(io::Error::other)?;
+
+        self.file.captures.push(CaptureRecord {
+            index,
+            file: name,
+            t_content,
+            t_saved,
+            reason,
+            width,
+            height,
+        });
+        write_session_json(&self.dir, &self.file)?;
+        Ok(path)
     }
 
     pub fn add_revisit(&mut self, t: f64, matches: usize) -> io::Result<()> {
-        let _ = (t, matches);
-        todo!()
+        self.file.revisits.push(RevisitRecord { t, matches });
+        write_session_json(&self.dir, &self.file)
     }
 
     pub fn add_event(&mut self, t: f64, kind: EventKind) -> io::Result<()> {
-        let _ = (t, kind);
-        todo!()
+        self.file.events.push(EventRecord { t, kind });
+        write_session_json(&self.dir, &self.file)
     }
 
     /// Move the most recent capture's PNG to `trash`, drop its record, and add an `undo`
     /// event at `t`. Returns the moved file's original path, or None when there is none.
     pub fn undo_last(&mut self, t: f64, trash: &dyn Trash) -> io::Result<Option<PathBuf>> {
-        let _ = (t, trash);
-        todo!()
+        let Some(last) = self.file.captures.last() else {
+            return Ok(None);
+        };
+        let path = self.dir.join(&last.file);
+        trash.trash(&path)?;
+
+        self.file.captures.pop();
+        self.file.events.push(EventRecord {
+            t,
+            kind: EventKind::Undo,
+        });
+        write_session_json(&self.dir, &self.file)?;
+        Ok(Some(path))
     }
 
     /// End the session: write slides.pdf when there is at least one capture, set `ended_at`
     /// and `pdf`, and rewrite session.json. Returns the PDF path when one was written.
     pub fn finish(&mut self, ended_at: DateTime<Local>) -> io::Result<Option<PathBuf>> {
-        let _ = ended_at;
-        todo!()
+        self.file.ended_at = Some(ended_at.to_rfc3339_opts(SecondsFormat::Secs, false));
+
+        let pdf_path = if self.file.captures.is_empty() {
+            self.file.pdf = None;
+            None
+        } else {
+            let images: Vec<PathBuf> = self
+                .file
+                .captures
+                .iter()
+                .map(|c| self.dir.join(&c.file))
+                .collect();
+            let path = self.dir.join(PDF_FILE);
+            write_pdf(&images, &path)?;
+            self.file.pdf = Some(PdfRecord {
+                file: PDF_FILE.to_string(),
+                pages: images.len(),
+                rebuilt_at: None,
+            });
+            Some(path)
+        };
+
+        write_session_json(&self.dir, &self.file)?;
+        Ok(pdf_path)
     }
 }
 
@@ -234,8 +347,88 @@ impl SessionWriter {
 /// pixels, as points; each page carries its own `MediaBox [0 0 w h]`. Each page draws one
 /// image XObject (8-bit `DeviceRGB`, `FlateDecode`, lossless) over the whole page.
 pub fn write_pdf(images: &[PathBuf], out: &Path) -> io::Result<()> {
-    let _ = (images, out);
-    todo!()
+    if images.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "no images to write a PDF from",
+        ));
+    }
+
+    let mut pdf = Pdf::new();
+    let catalog_id = Ref::new(1);
+    let page_tree_id = Ref::new(2);
+    // Three indirect objects per page: the page itself, its content stream, and its image.
+    let page_ids: Vec<Ref> = (0..images.len())
+        .map(|i| Ref::new(3 + 3 * i as i32))
+        .collect();
+
+    pdf.catalog(catalog_id).pages(page_tree_id);
+    pdf.pages(page_tree_id)
+        .kids(page_ids.iter().copied())
+        .count(page_ids.len() as i32);
+
+    let image_name = Name(b"Im0");
+    for (path, &page_id) in images.iter().zip(&page_ids) {
+        let content_id = Ref::new(page_id.get() + 1);
+        let image_id = Ref::new(page_id.get() + 2);
+
+        let rgb = image::open(path).map_err(io::Error::other)?.into_rgb8();
+        let (width, height) = rgb.dimensions();
+
+        let mut page = pdf.page(page_id);
+        page.media_box(Rect::new(0.0, 0.0, width as f32, height as f32));
+        page.parent(page_tree_id);
+        page.contents(content_id);
+        page.resources().x_objects().pair(image_name, image_id);
+        page.finish();
+
+        let encoded = compress_to_vec_zlib(rgb.as_raw(), CompressionLevel::DefaultLevel as u8);
+        let mut xobject = pdf.image_xobject(image_id, &encoded);
+        xobject.filter(Filter::FlateDecode);
+        xobject.width(width as i32);
+        xobject.height(height as i32);
+        xobject.color_space().device_rgb();
+        xobject.bits_per_component(8);
+        xobject.finish();
+
+        // Map the image's unit square onto the whole page: q w 0 0 h 0 0 cm /Im0 Do Q.
+        let mut content = Content::new();
+        content.save_state();
+        content.transform([width as f32, 0.0, 0.0, height as f32, 0.0, 0.0]);
+        content.x_object(image_name);
+        content.restore_state();
+        pdf.stream(content_id, &content.finish());
+    }
+
+    write_atomic(out, &pdf.finish())
+}
+
+/// Parses a capture file name matching `^[0-9]{3,}_[0-9]{2,}-[0-9]{2}-[0-9]{2}\.png$`
+/// (the `session.schema.json` pattern for `captures[].file`), returning its numeric index.
+fn capture_index(file_name: &str) -> Option<usize> {
+    let is_digits = |s: &str, min_len: usize| {
+        s.len() >= min_len && !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
+    };
+
+    let stem = file_name.strip_suffix(".png")?;
+    let (index, time) = stem.split_once('_')?;
+    if !is_digits(index, 3) {
+        return None;
+    }
+
+    let mut parts = time.split('-');
+    let (h, m, s) = (parts.next()?, parts.next()?, parts.next()?);
+    if parts.next().is_some()
+        || !is_digits(h, 2)
+        || m.len() != 2
+        || !is_digits(m, 2)
+        || s.len() != 2
+        || !is_digits(s, 2)
+    {
+        return None;
+    }
+
+    index.parse().ok()
 }
 
 /// Rebuild slides.pdf in a finished session folder from the `NNN_*.png` files still there,
@@ -243,6 +436,35 @@ pub fn write_pdf(images: &[PathBuf], out: &Path) -> io::Result<()> {
 /// `captures` is left unchanged. Returns the page count. With no images left, writes
 /// nothing and returns an `InvalidInput` error.
 pub fn rebuild_pdf(dir: &Path, now: DateTime<Local>) -> io::Result<usize> {
-    let _ = (dir, now);
-    todo!()
+    let mut found: Vec<(usize, PathBuf)> = fs::read_dir(dir)?
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let index = capture_index(entry.file_name().to_str()?)?;
+            Some((index, entry.path()))
+        })
+        .collect();
+    found.sort_by_key(|(index, _)| *index);
+
+    if found.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "no capture images left to rebuild the PDF from",
+        ));
+    }
+
+    let images: Vec<PathBuf> = found.into_iter().map(|(_, path)| path).collect();
+    let pages = images.len();
+    write_pdf(&images, &dir.join(PDF_FILE))?;
+
+    let session_path = dir.join(SESSION_FILE);
+    let mut file: SessionFile =
+        serde_json::from_str(&fs::read_to_string(&session_path)?).map_err(io::Error::other)?;
+    file.pdf = Some(PdfRecord {
+        file: PDF_FILE.to_string(),
+        pages,
+        rebuilt_at: Some(now.to_rfc3339_opts(SecondsFormat::Secs, false)),
+    });
+    write_session_json(dir, &file)?;
+
+    Ok(pages)
 }

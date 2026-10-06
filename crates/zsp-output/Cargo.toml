@@ -11,8 +11,9 @@ chrono = { workspace = true }
 image = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-# PDF writing (lossless Flate images) and the OS trash: chosen by the implementer,
-# for example pdf-writer + miniz_oxide, and trash.
+pdf-writer = "0.15"
+miniz_oxide = "0.9"
+trash = "5"
 
 [dev-dependencies]
 tempfile = { workspace = true }
