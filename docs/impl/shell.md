@@ -72,8 +72,9 @@ After these, `pnpm lint`, `pnpm test`, and `sh scripts/ui-check.sh` must still p
 
 When the environment variable `ZSP_AUTOSTART_TITLE` is set, the app starts a session at launch
 on the first window whose title contains it (whole window). With `ZSP_AUTOSTART_SECONDS=n`
-it stops after n seconds and quits. Nothing else changes; document it in README.md under
-development notes.
+it stops after n seconds and quits. `ZSP_SAVE_ROOT=<dir>` overrides the save root (so tests
+never write into the user's Pictures folder). Nothing else changes; document these in
+README.md under development notes.
 
 ## Checks
 
@@ -82,5 +83,9 @@ development notes.
 - `pnpm build` then `pnpm tauri build --debug --bundles app` (macOS .app)
 - Smoke test with the hook: open `spike/fixtures/stage.html` in a Chrome app window
   (`open -na "Google Chrome" --args --user-data-dir=<tmp> --app=file://<abs path> --window-size=1000,700`),
-  run the built binary with `ZSP_AUTOSTART_TITLE=ZSP-STAGE ZSP_AUTOSTART_SECONDS=40`, and check
-  that a session folder with captures, session.json, and slides.pdf appears under the save root.
+  run the built binary directly from the terminal (`target/debug/zoom-slides-picker`, not
+  `open` on the .app: run from the terminal it uses the terminal's Screen Recording
+  permission, while the .app would ask for its own) with
+  `ZSP_AUTOSTART_TITLE=ZSP-STAGE ZSP_AUTOSTART_SECONDS=40 ZSP_SAVE_ROOT=<tmp dir>`, and check
+  that a session folder with captures, session.json, and slides.pdf appears there. Close the
+  Chrome window afterwards (kill that Chrome instance by its --user-data-dir).

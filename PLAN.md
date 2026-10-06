@@ -16,7 +16,7 @@
 | 1 | `crates/zsp-output` | PNG、session.json、PDF、ごみ箱、PDF の作り直し | B2〜B7、B9（`cargo test -p zsp-output`） | Sonnet | 完了（8 件合格、c05ffb4） |
 | 1 | `crates/zsp-capture` | 窓の一覧とキャプチャ（xcap）、範囲、mp4（ffmpeg）、権限 | B8 と範囲の計算（`cargo test -p zsp-capture`） | Sonnet | 取り込み済み（c00af08）。B8 も合格 |
 | 1 | フロントエンド | パネル、範囲、設定、言語、トークン、モック | C1〜C9（`pnpm test`、`pnpm lint`、`sh scripts/ui-check.sh`） | Sonnet | 完了（26 件、UI チェック 17 件合格、c910d53） |
-| 2 | `crates/zsp-session` | 1〜3 をつなぐ。保留の画像、操作、窓を見失ったとき | `cargo test -p zsp-session` | Sonnet | 未着手 |
+| 2 | `crates/zsp-session` | 1〜3 をつなぐ。保留の画像、操作、窓を見失ったとき | `cargo test -p zsp-session` | Sonnet + Opus の修正 | 完了（13 件合格、37c6fa5） |
 | 3 | `src-tauri` | 常駐アイコン、窓、ショートカット、通知、言語、設定の保存、`docs/impl/ipc.md` のコマンド | ビルドと起動、D1、D3 | Sonnet | 未着手 |
 | 4 | 仕上げ | 実機の確認（D1、D3）、README、配布物のビルド | D、E の準備 | Opus | 未着手 |
 
