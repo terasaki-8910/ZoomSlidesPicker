@@ -1,0 +1,53 @@
+{
+ "detail_scale": 64,
+ "frames": {
+  "f1_slide1": {
+   "width": 1280,
+   "height": 720,
+   "grid_w": 160,
+   "grid_h": 90
+  },
+  "f1_video": {
+   "width": 1280,
+   "height": 720,
+   "grid_w": 160,
+   "grid_h": 90
+  },
+  "f1_webcam": {
+   "width": 1280,
+   "height": 720,
+   "grid_w": 160,
+   "grid_h": 90
+  },
+  "f3_lowres": {
+   "width": 1280,
+   "height": 720,
+   "grid_w": 160,
+   "grid_h": 90
+  },
+  "f5_cursor": {
+   "width": 1280,
+   "height": 720,
+   "grid_w": 160,
+   "grid_h": 90
+  },
+  "f6_dark": {
+   "width": 1280,
+   "height": 720,
+   "grid_w": 160,
+   "grid_h": 90
+  },
+  "crop_4x3": {
+   "width": 960,
+   "height": 720,
+   "grid_w": 160,
+   "grid_h": 120
+  },
+  "crop_odd": {
+   "width": 1270,
+   "height": 698,
+   "grid_w": 160,
+   "grid_h": 88
+  }
+ }
+}

@@ -1,0 +1,20 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "UNLICENSED"
+publish = false
+
+[workspace.dependencies]
+zsp-detect = { path = "crates/zsp-detect" }
+zsp-output = { path = "crates/zsp-output" }
+zsp-capture = { path = "crates/zsp-capture" }
+zsp-session = { path = "crates/zsp-session" }
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+tempfile = "3"

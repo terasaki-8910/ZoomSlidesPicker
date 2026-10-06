@@ -1,0 +1,21 @@
+[package]
+name = "zsp-capture"
+description = "Window listing and capture (xcap), crop regions, mp4 frames (ffmpeg), screen-recording permission"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# Windows: use Windows.Graphics.Capture instead of xcap's default method
+# (decided by spike/WINDOWS-CHECK.md).
+wgc = ["xcap/wgc"]
+
+[dependencies]
+# Pinned: 0.9.8 is the version verified in spike/ on macOS 26.5.2.
+xcap = "=0.9.8"
+image = { workspace = true }
+
+[dev-dependencies]
+zsp-detect = { workspace = true }
+serde_json = { workspace = true }

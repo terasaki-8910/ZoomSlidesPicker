@@ -1,0 +1,13 @@
+[package]
+name = "zsp-detect"
+description = "Slide-change detection: analysis grids and the save decision (pure, no I/O)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+image = { workspace = true }
+serde_json = { workspace = true }
