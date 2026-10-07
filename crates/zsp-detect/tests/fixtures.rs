@@ -70,6 +70,13 @@ fn a15_f7_camera_tile() {
     check_fixture("F7");
 }
 
+/// A15: a laser pointer dwelling on text lines does not hide the next slide's bullets on
+/// the same lines (the save shows all of them).
+#[test]
+fn a15_f8_laser_then_build() {
+    check_fixture("F8");
+}
+
 /// A1-A3: lecture at normal speed (7 saves, none while the video plays, one revisit).
 #[test]
 fn a1_a3_f1_lecture() {

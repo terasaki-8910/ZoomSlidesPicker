@@ -306,6 +306,30 @@ def render_f7(t):
     return img
 
 
+# F8: a laser pointer dwelling along the text lines of one slide for half a minute, then
+# the next slide builds its bullets on the same lines. The pointer must not leave those
+# lines out of the comparison: the save of the next slide shows all its bullets.
+# Back and forth along line 2, then line 3: each point is revisited every 5 s.
+F8_DWELL = [(170 + 70 * k, 236 + 84 * line) for line in (1, 2) for k in (0, 1, 2, 3, 2, 1)]
+
+
+def render_f8(t):
+    if t < 40.0:
+        img = _cached(("f8", "P"), lambda: _slide("Slide P 手順", ["データを集める", "形式をそろえる", "分析する", "結果を共有する"])[0])
+        if 5.0 <= t < 35.0:
+            # Dwell 1.25 s at each point; 15 s on line 2, then 15 s on line 3.
+            k = int((t - 5.0) / 1.25)
+            line_pts = F8_DWELL[:6] if t < 20.0 else F8_DWELL[6:]
+            i = k % len(line_pts)
+            x, y = line_pts[i]
+            d = ImageDraw.Draw(img)
+            d.ellipse([x - 10, y - 10, x + 10, y + 10], fill=(255, 150, 150))
+            d.ellipse([x - 6, y - 6, x + 6, y + 6], fill=(255, 40, 40))
+        return img
+    n = sum(t >= s for s in (40.0, 43.0, 46.0))
+    return _cached(("f8", "Q", n), lambda: _slide("Slide Q 課題", ["論文を 1 本読む", "要約を書く", "考えを加える"][:n])[0])
+
+
 # ---------------------------------------------------------------------------
 # Registry and expectations for the chosen behaviour (DECISIONS.md, round 1):
 # moving regions masked while they move and compared again once still (R1-5 b),
@@ -404,5 +428,16 @@ FIXTURES = {
             ("C：カメラとレーザーの間", 82.5, 110.0),
             ("A に戻った後", 110.0, 140.0),
         ],
+    },
+    "F8": {
+        "label": "レーザーで文字をなぞった後、同じ行に箇条書きが出る（70 秒）",
+        "render": render_f8,
+        "end": 70.0,
+        "saves": [("スライド P", 0.5, 3.0), ("スライド Q（箇条書き 3 つの最終状態）", 46.0, 48.5)],
+        "revisits": 0,
+        "blanks": 0,
+        "quiet": [("レーザーの間", 3.0, 40.0)],
+        # The saved frame of Q must show the last bullet (added at 46.0).
+        "sharp_from": [0.0, 46.0],
     },
 }

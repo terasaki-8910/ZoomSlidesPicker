@@ -57,6 +57,9 @@ fn main() {
                     revisits += 1;
                     println!("{t:8.2}  revisit of #{matches}  content {t_content:.2}");
                 }
+                Event::Hold { .. } if std::env::var_os("REPLAY_HOLDS").is_some() => {
+                    println!("{t:8.2}  hold");
+                }
                 Event::Blank { .. } | Event::Hold { .. } => {}
             }
         }
