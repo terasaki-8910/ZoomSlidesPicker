@@ -14,9 +14,15 @@ use crate::{Control, Notice, RgbaImage, Session, State, Status};
 pub enum SourceError {
     /// The window is gone or minimized; the session pauses and waits for it.
     Lost(String),
-    /// Anything else; the session stops.
+    /// Anything else. A live source retries: a capture can fail for a moment (the window is
+    /// being resized, or goes full screen), so only `FAILED_IN_A_ROW_BEFORE_LOST` failures in
+    /// a row count as a lost window. A recorded source stops.
     Failed(String),
 }
+
+/// Live sources: this many failed captures in a row (10 s at the default 0.5 s interval)
+/// make the window count as lost (pause and report it), instead of ending the session.
+pub const FAILED_IN_A_ROW_BEFORE_LOST: u32 = 20;
 
 /// Where frames come from.
 pub trait FrameSource: Send {
@@ -67,7 +73,9 @@ pub type Notify = Box<dyn Fn(&Notice, &Status) + Send>;
 ///   source is polled every 2 s so that its return is noticed (`Notice::WindowBack`).
 /// - Recorded source: frames as fast as they decode; at the end of input the session
 ///   finishes by itself.
-/// - `SourceError::Lost` -> `Session::on_lost`; `SourceError::Failed` -> finish and end.
+/// - `SourceError::Lost` -> `Session::on_lost`. `SourceError::Failed`: a live source retries
+///   at the normal cadence and counts as lost after `FAILED_IN_A_ROW_BEFORE_LOST` failures in
+///   a row (a session never ends by itself); a recorded source finishes and ends.
 /// - Controls are applied between frames; `Stop` finishes and ends the thread.
 /// - `notify` gets every notice together with the status after it; the shared status is
 ///   updated after every frame and control.
@@ -198,6 +206,7 @@ fn run_live(
     let start = Instant::now();
     let interval = Duration::from_secs_f64(interval_s.max(0.0));
     let mut next_tick = Duration::ZERO;
+    let mut failed_in_a_row = 0u32;
 
     loop {
         let snapshot = session.status();
@@ -238,16 +247,9 @@ fn run_live(
         let t = start.elapsed().as_secs_f64();
         match source.next_frame(t) {
             Ok(Some((frame_t, frame))) => {
+                failed_in_a_row = 0;
                 let notices = session.on_frame(frame_t, frame)?;
                 publish(&session, status, notify, notices);
-                // Keep the cadence, but never catch up on ticks missed while paused, while
-                // the window was lost, or during a slow capture: that would take a burst of
-                // frames back to back.
-                next_tick += interval;
-                let now = start.elapsed();
-                if next_tick < now {
-                    next_tick = now + interval;
-                }
             }
             Ok(None) => {
                 let notices = session.finish(t, Local::now())?;
@@ -259,10 +261,20 @@ fn run_live(
                 publish(&session, status, notify, notices);
             }
             Err(SourceError::Failed(_)) => {
-                let notices = session.finish(t, Local::now())?;
-                publish(&session, status, notify, notices);
-                return Ok(());
+                failed_in_a_row = failed_in_a_row.saturating_add(1);
+                if failed_in_a_row >= FAILED_IN_A_ROW_BEFORE_LOST {
+                    let notices = session.on_lost(t)?;
+                    publish(&session, status, notify, notices);
+                }
             }
+        }
+        // Keep the cadence, but never catch up on ticks missed while paused, while the
+        // window was lost, or during a slow capture: that would take a burst of frames back
+        // to back.
+        next_tick += interval;
+        let now = start.elapsed();
+        if next_tick < now {
+            next_tick = now + interval;
         }
     }
 }

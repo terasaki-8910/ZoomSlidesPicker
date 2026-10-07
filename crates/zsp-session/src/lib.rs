@@ -21,7 +21,9 @@ pub use zsp_capture::RgbaImage;
 mod engine;
 mod sources;
 
-pub use engine::{EngineHandle, FrameSource, Notify, SourceError, spawn};
+pub use engine::{
+    EngineHandle, FAILED_IN_A_ROW_BEFORE_LOST, FrameSource, Notify, SourceError, spawn,
+};
 pub use sources::{VideoSource, WindowSource};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
