@@ -458,6 +458,47 @@ def render_f10(t):
     return _cached(("f10", "B", n), lambda: _slide("Slide B 三つの論点", ["第一の論点", "第二の論点", "第三の論点"][:n])[0])
 
 
+# F11: the mouse rests on the video (R4-4). The player's controls stay up for 40 s: over a
+# slide already saved, then over the next slide, which arrives while they are up; then
+# they go away. Later a title bar shows along the top edge for 20 s.
+F11_SLIDES = [
+    (0.0, "第 2 回 前回の振り返り", ["資料の種類", "収集の手順"]),
+    (50.0, "1. 今日の問い", ["公開と保存は両立するか", "誰のための公開か"]),
+    (90.0, "2. 資料を読む", ["目録の例", "記述の単位"]),
+]
+F11_CONTROLS = (30.0, 70.0)
+F11_TITLE_BAR = (110.0, 130.0)
+
+
+def _f11_title_bar(img):
+    a = np.asarray(img, dtype=np.float32)
+    rows = int(F9_H * 0.18)
+    alpha = np.linspace(0.6, 0.0, rows, dtype=np.float32)[:, None, None]
+    a[:rows] = a[:rows] * (1.0 - alpha)
+    img = Image.fromarray(a.astype(np.uint8))
+    ImageDraw.Draw(img).text((24, 14), "第 2 回 授業動画.mp4", font=_font(22), fill=(240, 240, 240))
+    return img
+
+
+def render_f11(t):
+    start, title, bullets = max((x for x in F11_SLIDES if x[0] <= t), key=lambda x: x[0])
+    def make():
+        im = Image.new("RGB", (900, 675), PAPER)
+        d = ImageDraw.Draw(im)
+        d.rectangle([0, 0, 899, 90], fill=(230, 236, 244))
+        d.text((40, 24), title, font=_font(40), fill=INK)
+        for i, text in enumerate(bullets):
+            d.text((70, 150 + i * 70), "・" + text, font=_font(30), fill=INK)
+        return im
+    img = Image.new("RGB", (F9_W, F9_H), (0, 0, 0))
+    img.paste(_cached(("f11", title), make), (F9_SLIDE_X, 0))
+    if F11_CONTROLS[0] <= t < F11_CONTROLS[1]:
+        img = _f9_controls(img, t)
+    if F11_TITLE_BAR[0] <= t < F11_TITLE_BAR[1]:
+        img = _f11_title_bar(img)
+    return img
+
+
 # ---------------------------------------------------------------------------
 # Registry and expectations for the chosen behaviour (DECISIONS.md, round 1):
 # moving regions masked while they move and compared again once still (R1-5 b),
@@ -612,5 +653,25 @@ FIXTURES = {
         "quiet": [("C の後（B に戻る、B の最初の段階に戻る）", 72.0, 115.0)],
         # The final image of B shows all three bullets.
         "sharp_from": [0.0, 50.0, 70.0],
+    },
+    "F11": {
+        "label": "マウスが動画の上にあり、再生バーが出たまま（150 秒）",
+        "render": render_f11,
+        "end": 150.0,
+        "saves": [
+            ("スライド 1（バーのない版）", 0.5, 2.0),
+            ("スライド 2（バーが出た版を、消えた後の版で置き換え）", 70.5, 72.0),
+            ("スライド 3（上の帯が出ても保存しない）", 90.5, 92.0),
+        ],
+        "replaces": 1,
+        "revisits": 0,
+        "blanks": 0,
+        "quiet": [
+            ("スライド 1 の上にバーが出ている間", 2.0, 50.0),
+            ("バーが消えるまで、と消えた後", 72.0, 90.0),
+            ("スライド 3 と上の帯", 92.0, 150.0),
+        ],
+        # Each final image is without the bar: slide 2 from after the bar went away.
+        "sharp_from": [0.0, 70.0, 90.0],
     },
 }
