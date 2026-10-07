@@ -1,6 +1,6 @@
 """Export the fixtures in the form the Rust tests read (committed under fixtures/).
 
-For each fixture F1-F6 (samples every 0.5 s, the default comparison period):
+For each fixture F1-F7 (samples every 0.5 s, the default comparison period):
   fixtures/<id>/grid.png     8-bit grayscale strip: one analysis grid per sample, stacked
   fixtures/<id>/detail.png   16-bit grayscale strip: detail x 64, same layout
   fixtures/<id>/times.json   {"interval_s", "grid_w", "grid_h", "times": [...]}
@@ -9,7 +9,8 @@ fixtures/frames/<name>.png  full-size frames for the analysis equivalence test (
                             with the reference implementation's grid and detail next to them
 fixtures/f1_2fps.mp4        F1 as H.264 at 2 fps (ACCEPTANCE B8)
 
-Usage: .venv/bin/python samples/fixture/export_fixtures.py
+Usage: .venv/bin/python samples/fixture/export_fixtures.py [F7 ...]
+(with ids, only those strips and their expectations are rewritten)
 """
 
 import json
@@ -43,9 +44,13 @@ def save_u16(arr, path):
     Image.fromarray(a).save(path, format="PNG")
 
 
-def export_strips():
-    expected = {}
+def export_strips(only=None):
+    """All fixtures, or only the ids in `only` (the others' files and expectations are kept)."""
+    path = OUT / "expected.json"
+    expected = json.loads(path.read_text()) if only and path.exists() else {}
     for fid, spec in fixture.FIXTURES.items():
+        if only and fid not in only:
+            continue
         times = [round(float(t), 3) for t in np.arange(0.0, spec["end"] + 1e-9, INTERVAL)]
         grids, details = [], []
         for t in times:
@@ -72,6 +77,7 @@ def export_strips():
         if "sharp_from" in spec:
             expected[fid]["sharp_from"] = spec["sharp_from"]
         print(f"{fid}: {len(times)} samples, grid {gw}x{gh}")
+    expected = {fid: expected[fid] for fid in fixture.FIXTURES if fid in expected}
     (OUT / "expected.json").write_text(json.dumps(expected, ensure_ascii=False, indent=1))
 
 
@@ -120,6 +126,9 @@ def export_mp4():
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    export_strips()
-    export_frames()
-    export_mp4()
+    if len(sys.argv) > 1:
+        export_strips(only=set(sys.argv[1:]))  # e.g. `export_fixtures.py F7`: just those strips
+    else:
+        export_strips()
+        export_frames()
+        export_mp4()

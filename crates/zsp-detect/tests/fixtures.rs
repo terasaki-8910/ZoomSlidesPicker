@@ -1,4 +1,4 @@
-//! ACCEPTANCE A1-A10: the detector on the committed fixtures F1-F6.
+//! ACCEPTANCE A1-A10 and A15: the detector on the committed fixtures F1-F7.
 
 mod common;
 
@@ -61,6 +61,13 @@ fn check_fixture(id: &str) {
     for (i, s) in run.saves.iter().enumerate() {
         assert_eq!(s.index, i + 1, "{id}: indices are 1-based and dense");
     }
+}
+
+/// A15: a recorded lecture with the speaker's camera in a round tile that changes a few
+/// cells every few seconds: one save per slide (the build merged), the return is a revisit.
+#[test]
+fn a15_f7_camera_tile() {
+    check_fixture("F7");
 }
 
 /// A1-A3: lecture at normal speed (7 saves, none while the video plays, one revisit).
