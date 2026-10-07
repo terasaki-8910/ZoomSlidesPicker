@@ -91,8 +91,8 @@ Windows 用のインストーラーは Mac でも作れる（手順は `docs/WIN
 |---|---|
 | `ZSP_AUTOSTART_TITLE` | 起動時に、題名にこの文字列を含む窓で記録を始める（窓全体） |
 | `ZSP_AUTOSTART_SECONDS` | その秒数で停止して終了する |
-| `ZSP_SAVE_ROOT` | 保存先を差し替える（設定には書かない） |
-| `ZSP_OPEN_WINDOW` | 起動時に `panel`、`settings`、`region` の窓を開く。`region` は `ZSP_AUTOSTART_TITLE` の窓を使い、記録は始めない |
+| `ZSP_SAVE_ROOT` | 保存先を差し替える（設定には書かない）。他の変数がなくても効く |
+| `ZSP_OPEN_WINDOW` | 起動時に `panel`、`settings`、`region`、`library` の窓を開く。`region` は `ZSP_AUTOSTART_TITLE` の窓を使い、記録は始めない。どれかの変数があると、起動時に履歴の窓は開かない（`library` を指定したときを除く） |
 
 実際の画面で判定を試す（記録した窓の連番と `index.tsv` を判定に通し、保存する所を表示する。記録には授業の内容が写るので、リポジトリには入れない）:
 

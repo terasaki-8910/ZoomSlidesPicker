@@ -4,6 +4,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::i18n;
@@ -51,21 +52,46 @@ fn settings_path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
         .map(|dir| dir.join(SETTINGS_FILE))
 }
 
-/// Loads settings.json from the app config dir, falling back to defaults when it is
-/// missing, unreadable, or fails to parse (never panics on a corrupt file).
-pub fn load<R: Runtime>(app: &AppHandle<R>) -> Settings {
-    settings_path(app)
-        .and_then(|path| fs::read_to_string(path).ok())
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_else(default_settings)
+/// settings.json's on-disk shape: the wire `Settings` plus `knownRoots`, a Rust-only list
+/// the UI never sends or sees (docs/impl/library.md > Roots). Kept separate from
+/// `Settings` itself so `set_settings`'s argument (built from `SettingsView`, which has no
+/// `knownRoots`) can never clobber it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PersistedSettings {
+    #[serde(flatten)]
+    settings: Settings,
+    #[serde(default)]
+    known_roots: Vec<String>,
 }
 
-pub fn save<R: Runtime>(app: &AppHandle<R>, settings: &Settings) -> Result<(), String> {
+/// Loads settings.json (and the `knownRoots` list alongside it) from the app config dir,
+/// falling back to defaults when it is missing, unreadable, or fails to parse (never
+/// panics on a corrupt file).
+pub fn load<R: Runtime>(app: &AppHandle<R>) -> (Settings, Vec<String>) {
+    let persisted: Option<PersistedSettings> = settings_path(app)
+        .and_then(|path| fs::read_to_string(path).ok())
+        .and_then(|text| serde_json::from_str(&text).ok());
+    match persisted {
+        Some(p) => (p.settings, p.known_roots),
+        None => (default_settings(), Vec::new()),
+    }
+}
+
+pub fn save<R: Runtime>(
+    app: &AppHandle<R>,
+    settings: &Settings,
+    known_roots: &[String],
+) -> Result<(), String> {
     let path = settings_path(app).ok_or("no app config directory")?;
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
-    let text = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+    let persisted = PersistedSettings {
+        settings: settings.clone(),
+        known_roots: known_roots.to_vec(),
+    };
+    let text = serde_json::to_string_pretty(&persisted).map_err(|e| e.to_string())?;
     fs::write(&path, text).map_err(|e| e.to_string())
 }
 

@@ -5,17 +5,17 @@
 //!   contains it (whole window, or `ZSP_AUTOSTART_REGION=x,y,w,h` as fractions of it).
 //!   With `ZSP_OPEN_WINDOW=region`, opens the region window for that window instead.
 //! - `ZSP_AUTOSTART_SECONDS=<n>`: quits after n seconds (stopping the session first).
-//! - `ZSP_SAVE_ROOT=<dir>`: the save root for this run only (not written to the settings).
-//! - `ZSP_OPEN_WINDOW=panel|settings|region`: opens that window at launch.
+//! - `ZSP_SAVE_ROOT=<dir>`: the save root for this run only (not written to the settings);
+//!   applied at startup (lib.rs), with or without the other hooks.
+//! - `ZSP_OPEN_WINDOW=panel|settings|region|library`: opens that window at launch.
 
 use std::env;
 use std::thread;
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::ipc_types::RegionSel;
-use crate::state::SharedShell;
 use crate::windows;
 
 const RETRY_ATTEMPTS: u32 = 10;
@@ -33,14 +33,6 @@ pub fn spawn(app: AppHandle) {
 }
 
 fn run(app: &AppHandle, title: Option<&str>, open: Option<&str>) {
-    if let Ok(root) = env::var("ZSP_SAVE_ROOT") {
-        app.state::<SharedShell>()
-            .lock()
-            .unwrap()
-            .settings
-            .save_root = root;
-    }
-
     if let Some(title) = title {
         let Some(window_id) = find_window(title) else {
             eprintln!(
@@ -73,6 +65,7 @@ fn run(app: &AppHandle, title: Option<&str>, open: Option<&str>) {
     match open {
         Some("panel") => windows::open_panel(app),
         Some("settings") => windows::open_settings(app),
+        Some("library") => crate::library::open_window(app),
         _ => {}
     }
 

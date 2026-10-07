@@ -236,3 +236,71 @@ pub fn error_capture_failed(lang: Lang, detail: &str) -> String {
         Lang::En => format!("Capture failed: {detail}"),
     }
 }
+
+/// Tray menu's new first item (docs/impl/library.md > Rust side): matches `library.open`
+/// in src/i18n/{ja,en}.ts, so the wording agrees wherever it appears.
+pub fn tray_history(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Ja => "履歴…",
+        Lang::En => "History…",
+    }
+}
+
+/// Every library command taking `dir`: it doesn't resolve to a session folder directly
+/// inside a known root with a parsable session.json. Matches `library.notFound` in
+/// src/i18n/{ja,en}.ts.
+pub fn library_not_found(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Ja => "記録が見つかりません。",
+        Lang::En => "Session not found.",
+    }
+}
+
+/// `open_session_pdf`: there is no slides.pdf in the session folder. Matches
+/// `library.noPdfError` in src/i18n/{ja,en}.ts.
+pub fn library_no_pdf(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Ja => "PDF がありません。",
+        Lang::En => "There is no PDF.",
+    }
+}
+
+/// `rebuild_session_pdf`, `trash_session`, `trash_captures`, `fold_session`: the session
+/// is still recording. Matches `library.recordingLocked` in src/i18n/{ja,en}.ts, which the
+/// window shows inline instead -- this is the defensive command-level copy of the same
+/// wording for the rare case a stale UI still sends the request.
+pub fn library_recording_locked(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Ja => "記録中のため、整理は停止してからできます。",
+        Lang::En => "Stop recording to tidy up this session.",
+    }
+}
+
+/// `rebuild_session_pdf`: the session has no capture images left to build a PDF from
+/// (zsp-output's `rebuild_pdf` returns `InvalidInput`). Not covered by
+/// docs/impl/library.md's string table.
+pub fn library_no_images(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Ja => "画像がないため、PDF を作れません。",
+        Lang::En => "There are no images to build a PDF from.",
+    }
+}
+
+/// `trash_captures`: one of the given indices doesn't exist (zsp-output's
+/// `trash_captures` returns `NotFound`). Not covered by docs/impl/library.md's string
+/// table.
+pub fn library_bad_index(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Ja => "指定した画像が見つかりません。",
+        Lang::En => "One of the selected images was not found.",
+    }
+}
+
+/// `open_capture`: the path is not a capture PNG of a known session. Not covered by
+/// docs/impl/library.md's string table.
+pub fn library_capture_not_found(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Ja => "画像が見つかりません。",
+        Lang::En => "The image was not found.",
+    }
+}

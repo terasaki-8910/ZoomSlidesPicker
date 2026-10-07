@@ -87,3 +87,33 @@ export interface RegionSel {
   w: number;
   h: number;
 }
+
+// ---- Library (history) window: docs/impl/library.md > Types ---------------
+
+export interface SessionSummary {
+  dir: string; // absolute session folder: the identifier
+  folder: string; // folder name, e.g. "2026-10-07_1242"
+  title: string; // customTitle, else sourceTitle
+  customTitle: string | null;
+  memo: string; // "" when none
+  sourceApp: string | null; // e.g. "Safari"; null for mp4
+  sourceTitle: string; // window title or video file name
+  sourceKind: "window" | "mp4";
+  startedAt: string; // RFC 3339 from session.json
+  endedAt: string | null; // null while recording (or after a crash)
+  count: number; // captures whose PNG exists
+  hasPdf: boolean; // slides.pdf exists
+  recording: boolean; // the folder of the running or paused session
+  thumbPath: string | null; // the first existing capture PNG, null when none
+}
+
+export interface CaptureView {
+  index: number;
+  file: string; // e.g. "003_00-04-12.png"
+  path: string; // absolute path of the PNG
+  tContent: number;
+}
+
+export interface SessionDetail extends SessionSummary {
+  captures: CaptureView[]; // in index order, only those whose PNG exists
+}

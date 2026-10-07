@@ -87,7 +87,39 @@ interface Snapshot {             // for the region window
 }
 
 interface RegionSel { x: number; y: number; w: number; h: number }   // fractions 0-1 of the window
+
+interface SessionSummary {   // the history window (docs/impl/library.md)
+  dir: string;                 // absolute session folder: the identifier
+  folder: string;               // folder name, e.g. "2026-10-07_1242"
+  title: string;                // customTitle, else sourceTitle
+  customTitle: string | null;
+  memo: string;                 // "" when none
+  sourceApp: string | null;     // e.g. "Safari"; null for mp4
+  sourceTitle: string;          // window title or video file name
+  sourceKind: "window" | "mp4";
+  startedAt: string;            // RFC 3339 from session.json
+  endedAt: string | null;       // null while recording (or after a crash)
+  count: number;                // captures whose PNG exists
+  hasPdf: boolean;               // slides.pdf exists
+  recording: boolean;           // the folder of the running or paused session
+  thumbPath: string | null;     // the first existing capture PNG, null when none
+}
+
+interface CaptureView {
+  index: number;
+  file: string;                 // e.g. "003_00-04-12.png"
+  path: string;                 // absolute path of the PNG
+  tContent: number;
+}
+
+interface SessionDetail extends SessionSummary {
+  captures: CaptureView[];      // in index order, only those whose PNG exists
+}
 ```
+
+Thumbnails: the UI never gets image bytes through commands. `thumbUrl(path)` in
+`src/ipc/index.ts` returns `convertFileSrc(path, "zspthumb") + "?w=" + width` (Tauri builds
+`zspthumb://localhost/...` on macOS and `http://zspthumb.localhost/...` on Windows).
 
 ## Commands
 
@@ -116,19 +148,43 @@ returned as a string message (in the effective language) and shown by the UI as 
 | `close_window` | | | Closes the calling window. |
 | `fit_panel` | `height: number` | | The panel reports its content height in CSS pixels (on mount and whenever it changes); Rust resizes the panel window to that height (clamped to 160-640, width stays 320) and keeps it at the tray icon. Ignored for other windows. |
 
+The history window's commands (docs/impl/library.md has the full contract; all are
+`async` and run off the main thread). `dir` must be a folder directly inside a known root
+with a session.json; anything else is an error `記録が見つかりません。` / `Session not
+found.`:
+
+| Command | Args | Returns | Behaviour |
+|---|---|---|---|
+| `open_library` | | | Opens or focuses the library window (macOS: Regular policy). |
+| `list_sessions` | | `SessionSummary[]` | Every session folder in every known root, newest `startedAt` first. Unreadable folders and folders without a parsable session.json are skipped. |
+| `get_session` | `dir: string` | `SessionDetail` | |
+| `open_session_folder` | `dir` | | Opens the folder with the OS (opener). |
+| `open_session_pdf` | `dir` | | Opens slides.pdf; error `PDF がありません。` / `There is no PDF.` when missing. |
+| `rebuild_session_pdf` | `dir` | `number` | zsp-output `rebuild_pdf`; returns the page count. Error while recording. |
+| `rename_session` | `dir, title: string \| null` | | Writes `title` to meta.json (trimmed; empty or null clears it). Allowed while recording. |
+| `set_session_memo` | `dir, memo: string` | | Writes `memo` to meta.json. Allowed while recording. |
+| `trash_session` | `dir` | | Moves the folder to the OS trash. Error while recording. Clears `lastSession` if it pointed there. |
+| `trash_captures` | `dir, indices: number[]` | `number` | Moves those PNGs to the trash, removes their records from session.json, rebuilds slides.pdf when it existed (or deletes it when no image is left); returns the number moved. Error while recording. |
+| `fold_session` | `dir` | `number[]` | Dry run of `zsp_detect::fold_captures` over the session's existing PNGs (in index order); returns the indices it would not keep. Error while recording. |
+| `open_capture` | `path: string` | | Opens one capture PNG with the OS default app. The path must be a capture of a known session. |
+
 ## Events (Rust -> all windows)
 
 | Event | Payload | When |
 |---|---|---|
 | `app-state` | `AppState` | After every change: session status, captures, last session, permission, video progress. |
 | `settings` | `SettingsView` | After `set_settings`. |
+| `library-changed` | none | After anything that changes what `list_sessions` or `get_session` returns: a session starts, a capture is saved, replaced, or undone, a session finishes, a library command changes something, the save root changes (docs/impl/library.md). |
 
 ## Windows
 
-Created when opened, destroyed when closed (SPEC.md > 画面と操作). No window opens at launch.
+Created when opened, destroyed when closed (SPEC.md > 画面と操作), except the library
+window, which also opens at launch (unless a test hook variable is set -- docs/impl/shell.md
+> Test hook).
 
 | Label | URL | Size | Notes |
 |---|---|---|---|
 | `panel` | `index.html#/panel` | 320 wide, about 480 tall | No decorations, always on top, not in the taskbar; placed at the tray icon (positioner); closes when it loses focus. |
 | `region` | `index.html#/region` | 1100 x 760, resizable | Centered. |
 | `settings` | `index.html#/settings` | 560 x 560 | Normal window with a title. |
+| `library` | `index.html#/library` | 1100 x 720, minimum 760 x 520, resizable | Centered, normal decorations, title `ZoomSlidesPicker`. One instance: opening it again focuses it. macOS: `ActivationPolicy::Regular` while it exists, `Accessory` once it is destroyed (docs/impl/library.md > Window). |

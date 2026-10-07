@@ -28,10 +28,18 @@ zsp-detect = { workspace = true }
 zsp-output = { workspace = true }
 zsp-capture = { workspace = true }
 zsp-session = { workspace = true }
-image = { workspace = true }
+# The library window's zspthumb protocol encodes thumbnails as JPEG, on top of the
+# workspace's own PNG-only default (docs/impl/library.md > zspthumb protocol).
+image = { workspace = true, features = ["jpeg"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 sys-locale = "0.3"
 dirs = "6"
 base64 = "0.22"
+# Decodes the zspthumb:// request path (docs/impl/library.md), the same way tauri's own
+# asset protocol decodes its request paths.
+percent-encoding = "2"
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -7,6 +7,7 @@
 //! - `slides.pdf`: one page per capture in order, page size = image size (1 px = 1 pt),
 //!   images embedded losslessly (8-bit RGB, Flate)
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -19,6 +20,7 @@ use serde::{Deserialize, Serialize};
 
 pub const SESSION_FILE: &str = "session.json";
 pub const PDF_FILE: &str = "slides.pdf";
+pub const META_FILE: &str = "meta.json";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -537,4 +539,119 @@ pub fn rebuild_pdf(dir: &Path, now: DateTime<Local>) -> io::Result<usize> {
     write_session_json(dir, &file)?;
 
     Ok(pages)
+}
+
+/// Reads and parses `dir`/session.json (the history window's `list_sessions`/`get_session`;
+/// docs/impl/library.md > Rust side).
+pub fn read_session(dir: &Path) -> io::Result<SessionFile> {
+    let text = fs::read_to_string(dir.join(SESSION_FILE))?;
+    serde_json::from_str(&text).map_err(io::Error::other)
+}
+
+/// Session metadata (`meta.json`): a custom title and a memo, kept separate from
+/// session.json so a rename or memo save never races the session writer, which rewrites
+/// session.json after every capture (docs/impl/library.md > Rust side).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SessionMetaFile {
+    pub title: Option<String>,
+    #[serde(default)]
+    pub memo: String,
+}
+
+impl SessionMetaFile {
+    /// `title` trimmed; empty or all-whitespace becomes `None` (ACCEPTANCE B11).
+    pub fn new(title: Option<&str>, memo: impl Into<String>) -> Self {
+        let title = title
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_string);
+        Self {
+            title,
+            memo: memo.into(),
+        }
+    }
+}
+
+/// Reads `dir`/meta.json, defaulting (title `None`, memo `""`) when it is missing,
+/// unreadable, or fails to parse -- this never errors (ACCEPTANCE B11).
+pub fn read_meta(dir: &Path) -> SessionMetaFile {
+    fs::read_to_string(dir.join(META_FILE))
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+/// Writes `dir`/meta.json atomically (temp file + rename).
+pub fn write_meta(dir: &Path, meta: &SessionMetaFile) -> io::Result<()> {
+    let data = serde_json::to_string_pretty(meta).map_err(io::Error::other)?;
+    write_atomic(&dir.join(META_FILE), data.as_bytes())
+}
+
+/// Moves the PNGs at `indices` to `trash`, removes their records from session.json,
+/// rebuilds slides.pdf from the images still on disk (or removes it when none is left), and
+/// updates `pdf` (`pages` and `rebuilt_at`, or `None`) -- the history window's
+/// `trash_captures` command (docs/impl/library.md). `captures` keeps every other record, in
+/// their original order. A chosen PNG that is already gone counts as moved. Errors, and
+/// changes nothing, when `indices` names one that doesn't exist (ACCEPTANCE B12).
+/// session.json is rewritten as soon as the files are moved, so a failure while writing the
+/// PDF never leaves records pointing at files in the trash.
+pub fn trash_captures(
+    dir: &Path,
+    indices: &[usize],
+    trash: &dyn Trash,
+    now: DateTime<Local>,
+) -> io::Result<usize> {
+    if indices.is_empty() {
+        return Ok(0);
+    }
+
+    let session_path = dir.join(SESSION_FILE);
+    let mut file: SessionFile =
+        serde_json::from_str(&fs::read_to_string(&session_path)?).map_err(io::Error::other)?;
+
+    let wanted: BTreeSet<usize> = indices.iter().copied().collect();
+    for &index in &wanted {
+        if !file.captures.iter().any(|c| c.index == index) {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("no capture {index}"),
+            ));
+        }
+    }
+
+    let (removed, kept): (Vec<CaptureRecord>, Vec<CaptureRecord>) = file
+        .captures
+        .into_iter()
+        .partition(|rec| wanted.contains(&rec.index));
+    file.captures = kept;
+    for rec in &removed {
+        let path = dir.join(&rec.file);
+        if path.exists() {
+            trash.trash(&path)?;
+        }
+    }
+    write_session_json(dir, &file)?;
+
+    let images: Vec<PathBuf> = file
+        .captures
+        .iter()
+        .map(|c| dir.join(&c.file))
+        .filter(|p| p.is_file())
+        .collect();
+    let pdf_path = dir.join(PDF_FILE);
+    if images.is_empty() {
+        if pdf_path.exists() {
+            fs::remove_file(&pdf_path)?;
+        }
+        file.pdf = None;
+    } else {
+        write_pdf(&images, &pdf_path)?;
+        file.pdf = Some(PdfRecord {
+            file: PDF_FILE.to_string(),
+            pages: images.len(),
+            rebuilt_at: Some(now.to_rfc3339_opts(SecondsFormat::Secs, false)),
+        });
+    }
+    write_session_json(dir, &file)?;
+    Ok(removed.len())
 }

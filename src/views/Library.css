@@ -1,0 +1,396 @@
+.library-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.library-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.library-toolbar-title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.library-toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.library-toolbar-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.library-toolbar-state {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.library-toolbar-elapsed {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.library-permission-notice {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.library-permission-notice .notice {
+  flex: 1 1 auto;
+}
+
+.library-permission-actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-sm);
+}
+
+/* List + detail side by side (docs/impl/library.md > Layout: "layout A only"). */
+.library-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.library-list-col {
+  display: flex;
+  flex: 0 0 320px;
+  flex-direction: column;
+  width: 320px;
+  min-height: 0;
+  border-right: 1px solid var(--color-border);
+}
+
+@media (max-width: 900px) {
+  .library-list-col {
+    flex-basis: 280px;
+    width: 280px;
+  }
+}
+
+/* Pinned above the scrolling list, rather than scrolling away with it. */
+.library-search-wrap {
+  flex: none;
+  padding: var(--space-sm);
+}
+
+.library-search {
+  width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.library-list {
+  flex: 1 1 auto;
+  margin: 0;
+  overflow-y: auto;
+  padding: 0 var(--space-xs) var(--space-xs);
+  list-style: none;
+}
+
+.library-empty-hint {
+  margin: 0;
+  padding: var(--space-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.library-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.library-row.is-selected {
+  border-left-color: var(--color-accent);
+  background: var(--color-bg-elevated);
+}
+
+.library-row-thumb {
+  flex: none;
+  width: 64px;
+  height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  /* The whole capture, letterboxed: regions have any aspect ratio. */
+  object-fit: contain;
+}
+
+.library-row-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.library-row-title {
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.library-badge {
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  padding: 1px var(--space-xs);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.library-badge-accent {
+  color: var(--color-accent);
+  /* "accent text on a subtle background" (docs/impl/library.md): tokens.css has no
+     accent-tinted surface colour, so the subtlety comes from the same neutral elevated
+     surface used elsewhere, not a new token (CLAUDE.md: tokens.css changes need approval). */
+  background: var(--color-bg-elevated);
+}
+
+.library-detail-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--space-xl);
+}
+
+.library-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.library-detail-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  /* Fixed height whether showing the static heading or the rename input, so switching
+     between them does not nudge the meta line below (ui.md: fixed-position row controls). */
+  min-height: 32px;
+}
+
+.library-detail-title {
+  overflow: hidden;
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-rename-input {
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+}
+
+.library-detail-meta {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.library-memo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.library-memo-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.library-memo-field {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding: var(--space-sm);
+  font-size: var(--font-size-sm);
+}
+
+.library-memo-saved {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.library-recording-note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.library-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* Pushed to the end of the (wrapping) action row. */
+.library-detail-actions > .library-btn-danger {
+  margin-left: auto;
+}
+
+/* A danger-styled secondary button (the action row's 削除…), layered on Button's own
+   classes via tokens only -- a CSS modifier here rather than a new Button `kind`, since
+   it is the only secondary button in the app that needs this treatment. */
+.library-btn-danger.library-btn-danger {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.library-btn-danger.library-btn-danger:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger);
+}
+
+/* A solid danger *primary* button for the two confirm dialogs' "ごみ箱に移す" --
+   `--color-on-accent` is reused rather than inventing a new token: in both themes it is
+   "white in light mode, near-black in dark mode", which is exactly the text colour that
+   also reads at AA contrast on the danger background (verified: ~6.6:1 light, ~6.7:1 dark). */
+.library-btn-confirm-danger.library-btn-confirm-danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: var(--color-on-accent);
+}
+
+.library-btn-confirm-danger.library-btn-confirm-danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.library-confirm-message {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.library-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-md);
+}
+
+.library-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+/* Resets a <button> back to the plain tile look (docs/impl/library.md > Layout: "a
+   tile is a button") -- not selected via :disabled since the tile is never disabled. */
+.library-tile-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.library-tile-img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  /* The whole capture, letterboxed: regions have any aspect ratio. */
+  object-fit: contain;
+}
+
+.library-tile-caption {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.library-tile-selectable {
+  cursor: pointer;
+}
+
+.library-tile-caption-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.library-tile-check {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+/* A chosen image is outlined in the accent colour, so the choice shows on the image too. */
+.library-tile-selectable:has(.library-tile-check:checked) .library-tile-img {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.library-empty-state {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+  color: var(--color-text-secondary);
+  text-align: center;
+}

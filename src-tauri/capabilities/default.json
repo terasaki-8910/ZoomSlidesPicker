@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for every window. The webview never touches files, dialogs, the shell, or the OS directly (docs/impl/ipc.md) -- Rust calls the plugins itself, so the webview needs only the core default permissions.",
-  "windows": ["panel", "region", "settings"],
+  "windows": ["panel", "region", "settings", "library"],
   "permissions": ["core:default"]
 }

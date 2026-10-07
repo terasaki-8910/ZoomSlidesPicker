@@ -41,17 +41,21 @@ After these, `pnpm lint`, `pnpm test`, and `sh scripts/ui-check.sh` must still p
 
 ## Behaviour
 
-- macOS: `ActivationPolicy::Accessory` (no Dock icon).
+- macOS: `ActivationPolicy::Accessory` (no Dock icon), except while the library window is
+  open, when it is `Regular` (Dock icon, Cmd-Tab) -- back to `Accessory` once it is
+  destroyed (docs/impl/library.md > Window).
 - Tray: icon by state (template images on macOS). Left click toggles the panel; right click
-  shows the menu: 開始… (opens the panel), 停止, 保存先を開く, PDF を作り直す,
-  動画ファイルから抽出…, 設定…, 終了. Items that do not apply are disabled. While a session
-  runs, macOS shows the capture count as the tray title; Windows shows it in the tooltip
-  (titles are unsupported on Windows). Menu, tooltip, and window titles follow the effective
-  language and are rebuilt by `apply_language`.
-- Windows: created when opened, destroyed when closed (docs/impl/ipc.md > Windows). The panel
-  is placed at the tray icon with the positioner plugin and closes when it loses focus.
-  Opening the app again while it runs (macOS `RunEvent::Reopen`) opens the panel, centered
-  since there is no tray position: a crowded menu bar can leave the tray icon no room.
+  shows the menu: 履歴… (opens the library window), 開始… (opens the panel), 停止,
+  保存先を開く, PDF を作り直す, 動画ファイルから抽出…, 設定…, 終了. Items that do not apply
+  are disabled. While a session runs, macOS shows the capture count as the tray title;
+  Windows shows it in the tooltip (titles are unsupported on Windows). Menu, tooltip, and
+  window titles follow the effective language and are rebuilt by `apply_language`.
+- Windows: created when opened, destroyed when closed (docs/impl/ipc.md > Windows), except
+  the library window, which also opens at launch (R3-8 a) unless `ZSP_AUTOSTART_TITLE` or
+  `ZSP_OPEN_WINDOW` is set (Test hook, below). The panel is placed at the tray icon with the
+  positioner plugin and closes when it loses focus. Opening the app again while it runs
+  (macOS `RunEvent::Reopen`) opens or focuses the library window (docs/impl/library.md), not
+  the panel -- a crowded menu bar can leave the tray icon no room to click.
 - Settings: JSON in the app config dir; defaults in docs/impl/ipc.md. Effective language:
   `sys-locale` starts with `ja` -> ja, else en (unless set explicitly).
 - Shortcuts: register the three accelerators from settings at startup and after every
@@ -91,7 +95,8 @@ After these, `pnpm lint`, `pnpm test`, and `sh scripts/ui-check.sh` must still p
 When the environment variable `ZSP_AUTOSTART_TITLE` is set, the app starts a session at launch
 on the first window whose title contains it (whole window). With `ZSP_AUTOSTART_SECONDS=n`
 it stops after n seconds and quits. `ZSP_SAVE_ROOT=<dir>` overrides the save root (so tests
-never write into the user's Pictures folder). `ZSP_OPEN_WINDOW=panel|settings|region` opens
+never write into the user's Pictures folder; applied at startup even without the other
+hooks). `ZSP_OPEN_WINDOW=panel|settings|region|library` opens
 that window at launch (`region` takes the `ZSP_AUTOSTART_TITLE` window and starts no
 session), since the tray icon cannot be clicked from a script. Nothing else changes;
 document these in README.md under development notes.

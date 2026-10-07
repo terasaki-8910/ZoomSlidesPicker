@@ -57,4 +57,45 @@ export const ja = {
   "settings.recording": "キーを押してください（Esc で取り消し）",
   "settings.shortcut.pauseResume": "一時停止と再開",
   "settings.saved": "保存しました",
+
+  // Library (history) window -- docs/impl/library.md > Strings, copied verbatim, plus
+  // library.slideCount (see en.ts for why it is not in that table).
+  "library.search": "題名・日付・アプリ・メモで検索",
+  "library.meta": "{date} · {duration} · {count} 枚",
+  "library.recording": "記録中",
+  "library.noPdf": "PDF なし",
+  "library.hasPdf": "PDF あり",
+  "library.source": "{app} の「{title}」",
+  "library.rename": "名前を変更",
+  "library.openFolder": "フォルダを開く",
+  "library.openPdf": "PDF を開く",
+  "library.rebuildPdf": "PDF を作り直す",
+  "library.dedupe": "同じスライドをまとめる…",
+  "library.select": "画像を選ぶ",
+  "library.trashSelected": "選んだ画像をごみ箱へ（{count} 枚）",
+  "library.cancelSelect": "やめる",
+  "library.delete": "削除…",
+  "library.open": "履歴…",
+  "library.openButton": "履歴",
+  "library.memo": "メモ",
+  "library.memoPlaceholder": "授業の内容や課題など",
+  "library.saved": "保存しました",
+  "library.recordingLocked": "記録中のため、整理は停止してからできます。",
+  "library.confirmDelete": "「{title}」をごみ箱に移しますか？ フォルダごと移します。ごみ箱から戻せます。",
+  "library.confirmDeleteButton": "ごみ箱に移す",
+  "library.confirmTrashImages": "{count} 枚をごみ箱に移して、PDF を作り直しますか？",
+  "library.dedupeSelected": "同じスライドとみなした {count} 枚を選びました。確かめてから、ごみ箱に移してください。",
+  "library.dedupeNone": "同じスライドは見つかりませんでした。",
+  "library.pickTitle": "授業の窓を選ぶ",
+  "library.empty": "まだ記録はありません。",
+  "library.notFound": "記録が見つかりません。",
+  "library.noPdfError": "PDF がありません。",
+  "library.cancel": "やめる",
+  "library.noHits": "見つかりませんでした。",
+  "library.caption": "{index} · {time}",
+  // SPEC-QUESTION: not in the strings table. The detail pane's meta line needs the
+  // "{count} 枚" fragment on its own (it has a 4th segment, PDF status, after it, so it
+  // cannot reuse library.meta's fixed template) -- text taken verbatim from that
+  // template's own tail, not newly invented wording.
+  "library.slideCount": "{count} 枚",
 } as const;
