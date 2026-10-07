@@ -25,6 +25,10 @@
 //! not the whole grid's median, which lands between black and white when the region has
 //! black bars beside the slide.
 //!
+//! A player's control bar (R4-4) is a difference that only darkens or only lightens a band
+//! along the bottom or top edge (`edge_overlay`): a state that only adds one is the same
+//! slide, and the picture without it replaces a capture saved with it.
+//!
 //! Protocol for the caller (the session engine):
 //! - Call [`Detector::step`] once per sample, in time order, and apply the returned events
 //!   in order.
@@ -55,6 +59,18 @@ pub struct Config {
     /// is not saved: player controls shown for a moment, a notification, a slide flicked
     /// past and back.
     pub transient_s: f64,
+    /// A player's control bar (R4-4): a difference that lies in a band along the bottom or
+    /// top edge (at most `edge_band_share` of the height), reaches the edge, changes at
+    /// least `edge_coverage` of the band's cells that are brighter than `edge_dark_floor`
+    /// (black bars cannot darken) in at least `edge_min_width` of the columns that have
+    /// such cells, and goes one way in at least `edge_direction` of its cells (darker: the
+    /// bar is shown; lighter: hidden). A state that only adds such a bar is the same slide; the picture without
+    /// it replaces a capture saved with it.
+    pub edge_band_share: f64,
+    pub edge_min_width: f64,
+    pub edge_coverage: f64,
+    pub edge_dark_floor: u8,
+    pub edge_direction: f64,
     /// Per-cell |difference| (0-255) that counts as a changed cell (strictly greater).
     pub cell_thresh: i32,
     /// Share of compared cells changed => a real change (strictly greater).
@@ -128,6 +144,11 @@ impl Default for Config {
             settle_s: 1.0,
             final_quiet_s: 5.0,
             transient_s: 5.0,
+            edge_band_share: 0.45,
+            edge_min_width: 0.8,
+            edge_coverage: 0.5,
+            edge_dark_floor: 40,
+            edge_direction: 0.85,
             cell_thresh: 12,
             change_thresh: 0.002,
             removed_thresh: 0.001,
@@ -231,6 +252,87 @@ fn median_f64(values: &mut [f64]) -> f64 {
         values[n / 2]
     } else {
         (values[n / 2 - 1] + values[n / 2]) / 2.0
+    }
+}
+
+/// Which way a player's control bar went between two states (R4-4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Overlay {
+    /// The new state is the old one with a control bar over an edge.
+    Shown,
+    /// The old state had the bar; the new one is the same picture without it.
+    Hidden,
+}
+
+/// Whether `old` -> `new` (on `keep` cells) is only a player's control bar shown or hidden
+/// along the bottom or top edge (`Config::edge_band_share` and the fields after it).
+fn edge_overlay(old: &Grid, new: &Grid, keep: &[bool], cfg: &Config) -> Option<Overlay> {
+    let (w, h) = (old.width, old.height);
+    let band_rows = ((h as f64) * cfg.edge_band_share).round() as usize;
+    if w == 0 || h < 4 || band_rows < 2 {
+        return None;
+    }
+    let mut cols = vec![false; w];
+    let (mut darker, mut total) = (0usize, 0usize);
+    let (mut min_row, mut max_row) = (h, 0usize);
+    for y in 0..h {
+        for (x, col) in cols.iter_mut().enumerate() {
+            let i = y * w + x;
+            let d = new.data[i] as i32 - old.data[i] as i32;
+            if keep[i] && d.abs() > cfg.cell_thresh {
+                total += 1;
+                *col = true;
+                min_row = min_row.min(y);
+                max_row = max_row.max(y);
+                if d < 0 {
+                    darker += 1;
+                }
+            }
+        }
+    }
+    if total == 0 {
+        return None;
+    }
+    let at_bottom = max_row + 2 >= h && min_row + band_rows >= h;
+    let at_top = min_row <= 1 && max_row < band_rows;
+    if !(at_bottom || at_top) {
+        return None;
+    }
+    // Most of the band changed, where anything could (black stays black under a bar, so
+    // black bars beside the picture count neither for the width nor for the cover).
+    let (mut eligible, mut covered) = (0usize, 0usize);
+    let mut eligible_cols = vec![false; w];
+    for y in min_row..=max_row {
+        for (x, col) in eligible_cols.iter_mut().enumerate() {
+            let i = y * w + x;
+            if keep[i] && old.data[i].max(new.data[i]) > cfg.edge_dark_floor {
+                eligible += 1;
+                *col = true;
+                if (new.data[i] as i32 - old.data[i] as i32).abs() > cfg.cell_thresh {
+                    covered += 1;
+                }
+            }
+        }
+    }
+    if eligible == 0 || (covered as f64) < cfg.edge_coverage * eligible as f64 {
+        return None;
+    }
+    let spanned = eligible_cols
+        .iter()
+        .zip(&cols)
+        .filter(|&(&e, &c)| e && c)
+        .count();
+    let possible = eligible_cols.iter().filter(|&&c| c).count();
+    if (spanned as f64) < cfg.edge_min_width * possible as f64 {
+        return None;
+    }
+    let dark_share = darker as f64 / total as f64;
+    if dark_share >= cfg.edge_direction {
+        Some(Overlay::Shown)
+    } else if dark_share <= 1.0 - cfg.edge_direction {
+        Some(Overlay::Hidden)
+    } else {
+        None
     }
 }
 
@@ -577,9 +679,16 @@ impl Detector {
     ) {
         let thresh = self.cfg.cell_thresh;
         let change_thresh = self.cfg.change_thresh;
+        let cfg = self.cfg.clone();
         let same =
             |g: &Grid| changed_frac(&pending.grid.data, &g.data, keep, thresh) <= change_thresh;
-        if self.last_saved.as_ref().is_some_and(same) {
+        let overlay = |g: &Grid| edge_overlay(g, &pending.grid, keep, &cfg);
+        // The baseline, or the baseline with a player's control bar over it (R4-4).
+        if self
+            .last_saved
+            .as_ref()
+            .is_some_and(|b| same(b) || overlay(b) == Some(Overlay::Shown))
+        {
             return;
         }
         let versions = self
@@ -591,7 +700,7 @@ impl Detector {
             .chain(self.aliases.iter().rev().map(|(i, g)| (*i, g)));
         let mut revisit = None;
         for (index, g) in versions {
-            if same(g) {
+            if same(g) || overlay(g) == Some(Overlay::Shown) {
                 revisit = Some((index, g.clone()));
                 break;
             }
@@ -610,20 +719,30 @@ impl Detector {
             self.last_saved_index = None;
             return;
         }
+        // The picture without the control bar, for a capture saved with it: replace it.
+        if may_replace {
+            let target = self
+                .last_saved_index
+                .filter(|_| {
+                    self.last_saved
+                        .as_ref()
+                        .is_some_and(|b| overlay(b) == Some(Overlay::Hidden))
+                })
+                .or_else(|| {
+                    (1..=self.history.len())
+                        .rev()
+                        .find(|&i| overlay(&self.history[i - 1]) == Some(Overlay::Hidden))
+                });
+            if let Some(index) = target {
+                self.replace(index, pending, t_save, reason, events);
+                return;
+            }
+        }
         if may_replace && let (Some(index), Some(base)) = (self.last_saved_index, &self.last_saved)
         {
             let kinds = cell_change_kinds(base, &pending.grid, keep, thresh);
             if kinds.removed < self.cfg.removed_thresh && kinds.added >= self.cfg.added_thresh {
-                events.push(Event::Replace {
-                    index,
-                    t_content: pending.t,
-                    t_save,
-                    held_t: pending.held_t,
-                    reason,
-                });
-                let old = std::mem::replace(&mut self.history[index - 1], pending.grid.clone());
-                self.aliases.push((index, old));
-                self.last_saved = Some(pending.grid);
+                self.replace(index, pending, t_save, reason, events);
                 return;
             }
         }
@@ -638,6 +757,29 @@ impl Detector {
         self.last_saved = Some(pending.grid.clone());
         self.last_saved_index = Some(index);
         self.history.push(pending.grid);
+    }
+
+    /// Replace capture `index` with `pending` (R3-2, R4-4): its old version stays matchable
+    /// as an alias, and `pending` becomes the baseline.
+    fn replace(
+        &mut self,
+        index: usize,
+        pending: Pending,
+        t_save: f64,
+        reason: SaveReason,
+        events: &mut Vec<Event>,
+    ) {
+        events.push(Event::Replace {
+            index,
+            t_content: pending.t,
+            t_save,
+            held_t: pending.held_t,
+            reason,
+        });
+        let old = std::mem::replace(&mut self.history[index - 1], pending.grid.clone());
+        self.aliases.push((index, old));
+        self.last_saved = Some(pending.grid);
+        self.last_saved_index = Some(index);
     }
 
     /// Whether `grid` differs from the baseline only where something moved or was touched

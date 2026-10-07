@@ -1,4 +1,4 @@
-//! ACCEPTANCE A1-A10, A15 and A16: the detector on the committed fixtures F1-F10.
+//! ACCEPTANCE A1-A10 and A15-A17: the detector on the committed fixtures F1-F11.
 
 mod common;
 
@@ -104,6 +104,14 @@ fn a15_f9_small_camera_and_player_controls() {
 #[test]
 fn a16_f10_spaced_build_replaces() {
     check_fixture("F10");
+}
+
+/// A17 (R4-4): with the mouse resting on the video, the player's controls over a saved
+/// slide save nothing; a slide that arrives under them is saved and then replaced by the
+/// picture without them; a title bar along the top edge saves nothing.
+#[test]
+fn a17_f11_player_controls_stay_up() {
+    check_fixture("F11");
 }
 
 /// A1-A3: lecture at normal speed (7 saves, none while the video plays, one revisit).
