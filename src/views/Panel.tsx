@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FiSettings } from "react-icons/fi";
+import { FiClock, FiSettings } from "react-icons/fi";
 import Button from "../components/Button";
 import IconButton from "../components/IconButton";
 import Notice from "../components/Notice";
@@ -11,6 +11,7 @@ import {
   getAppState,
   onAppState,
   openFolder,
+  openLibrary,
   openPermissionSettings,
   openSettings,
   pauseSession,
@@ -230,7 +231,10 @@ export default function Panel() {
     <div className="panel" data-testid="panel-root">
       <header className="panel-header" ref={headerRef}>
         <span className="panel-header-title">{t("panel.title")}</span>
-        <IconButton icon={<FiSettings aria-hidden="true" />} label={t("action.openSettings")} onClick={() => void openSettings()} />
+        <div className="panel-header-actions">
+          <IconButton icon={<FiClock aria-hidden="true" />} label={t("library.openButton")} onClick={() => void openLibrary()} />
+          <IconButton icon={<FiSettings aria-hidden="true" />} label={t("action.openSettings")} onClick={() => void openSettings()} />
+        </div>
       </header>
       <div className="panel-body">
         <div className="panel-content" ref={contentRef}>

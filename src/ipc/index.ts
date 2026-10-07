@@ -6,7 +6,7 @@
 // their own fakes per test, so they do not depend on src/ipc/mock.ts at all. The mock
 // below is used instead at runtime (pnpm dev, pnpm build:mock/preview:mock, and
 // scripts/ui-check.sh) when VITE_IPC_MOCK=1.
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import * as mock from "./mock";
 import type { AppState, RegionSel, SessionDetail, SessionSummary, Settings, SettingsView, Snapshot, WindowEntry } from "./types";
@@ -113,12 +113,67 @@ export function onSettings(cb: (settings: SettingsView) => void): Promise<Unlist
   return useMock ? mock.onSettings(cb) : listen<SettingsView>("settings", (e) => cb(e.payload));
 }
 
-// ---- Library (history) window: docs/impl/library.md > Data. Prototype only -- the
-// Rust commands below do not exist yet (the real branch is written for when they do).
+// ---- Library (history) window: docs/impl/library.md > Commands. The Rust commands
+// below do not exist yet (src-tauri/src/library.rs lands separately); this branch is
+// written for when they do, against the mock in the meantime.
+export function openLibrary(): Promise<void> {
+  return useMock ? mock.openLibrary() : invoke("open_library");
+}
+
 export function listSessions(): Promise<SessionSummary[]> {
   return useMock ? mock.listSessions() : invoke("list_sessions");
 }
 
-export function getSession(id: string): Promise<SessionDetail> {
-  return useMock ? mock.getSession(id) : invoke("get_session", { id });
+export function getSession(dir: string): Promise<SessionDetail> {
+  return useMock ? mock.getSession(dir) : invoke("get_session", { dir });
+}
+
+export function openSessionFolder(dir: string): Promise<void> {
+  return useMock ? mock.openSessionFolder(dir) : invoke("open_session_folder", { dir });
+}
+
+export function openSessionPdf(dir: string): Promise<void> {
+  return useMock ? mock.openSessionPdf(dir) : invoke("open_session_pdf", { dir });
+}
+
+export function rebuildSessionPdf(dir: string): Promise<number> {
+  return useMock ? mock.rebuildSessionPdf(dir) : invoke("rebuild_session_pdf", { dir });
+}
+
+export function renameSession(dir: string, title: string | null): Promise<void> {
+  return useMock ? mock.renameSession(dir, title) : invoke("rename_session", { dir, title });
+}
+
+export function setSessionMemo(dir: string, memo: string): Promise<void> {
+  return useMock ? mock.setSessionMemo(dir, memo) : invoke("set_session_memo", { dir, memo });
+}
+
+export function trashSession(dir: string): Promise<void> {
+  return useMock ? mock.trashSession(dir) : invoke("trash_session", { dir });
+}
+
+export function trashCaptures(dir: string, indices: number[]): Promise<number> {
+  return useMock ? mock.trashCaptures(dir, indices) : invoke("trash_captures", { dir, indices });
+}
+
+export function foldSession(dir: string): Promise<number[]> {
+  return useMock ? mock.foldSession(dir) : invoke("fold_session", { dir });
+}
+
+export function openCapture(path: string): Promise<void> {
+  return useMock ? mock.openCapture(path) : invoke("open_capture", { path });
+}
+
+export function onLibraryChanged(cb: () => void): Promise<UnlistenFn> {
+  return useMock ? mock.onLibraryChanged(cb) : listen("library-changed", () => cb());
+}
+
+/**
+ * Never fetches image bytes through a command -- the webview loads this URL directly.
+ * Tauri builds `zspthumb://localhost/...` on macOS and `http://zspthumb.localhost/...`
+ * on Windows (docs/impl/library.md > Types); the mock instead returns one of the
+ * generated SVG data URLs it keeps keyed by path.
+ */
+export function thumbUrl(path: string, width: number): string {
+  return useMock ? mock.thumbUrl(path, width) : `${convertFileSrc(path, "zspthumb")}?w=${width}`;
 }

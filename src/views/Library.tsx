@@ -1,34 +1,58 @@
-import { useEffect, useMemo, useState } from "react";
-import { FiEdit2, FiSettings, FiTrash2 } from "react-icons/fi";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { FiEdit2, FiSettings } from "react-icons/fi";
 import Button from "../components/Button";
 import IconButton from "../components/IconButton";
+import Modal from "../components/Modal";
+import Notice from "../components/Notice";
+import WindowPicker from "../components/WindowPicker";
 import { useLang } from "../i18n";
 import type { TKey } from "../i18n";
-import { getAppState, getSession, listSessions, onAppState, openSettings } from "../ipc";
+import {
+  foldSession,
+  getAppState,
+  getSession,
+  listSessions,
+  onAppState,
+  onLibraryChanged,
+  openCapture,
+  openPermissionSettings,
+  openSessionFolder,
+  openSessionPdf,
+  openSettings,
+  pauseSession,
+  rebuildSessionPdf,
+  renameSession,
+  requestPermission,
+  resumeSession,
+  setSessionMemo,
+  stopSession,
+  thumbUrl,
+  trashCaptures,
+  trashSession,
+} from "../ipc";
 import type { AppState, Lang, SessionDetail, SessionSummary } from "../ipc/types";
 import { formatDuration, formatElapsed, formatSessionRange, formatSessionStart, sessionDateSearchForms } from "../lib/format";
 import "./Library.css";
 
 type TFunc = (key: TKey, params?: Record<string, string | number>) => string;
+type ConfirmKind = "delete" | "trashCaptures";
+type ActionNotice = { tone: "warning" | "neutral"; text: string };
 
-// Prototype scope (docs/impl/library.md): running on the IPC mock only, not wired to
-// Rust. Every action button below other than the ones that only change local UI state
-// (search, list/listbox selection, select-mode entry/exit, layout B's open/back) is
-// visual only and calls nothing -- same treatment as the select-mode actions the spec
-// itself calls out as "no-op mock functions", extended consistently to the rest of the
-// action row and the toolbar's start/pause/resume/stop so the prototype does not mix
-// some wired controls with others that only look wired.
+// Thumbnail widths passed to thumbUrl() (docs/impl/library.md > Types): generous enough
+// for a retina display at each spot's rendered CSS size (64x36 and the grid tiles).
+const LIST_THUMB_WIDTH = 128;
+const TILE_THUMB_WIDTH = 360;
 
-function layoutFromLocation(): "split" | "list" {
-  if (typeof location === "undefined") return "split";
-  return new URLSearchParams(location.search).get("layout") === "list" ? "list" : "split";
+function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
-/** Case-insensitive, space-separated AND; each term may match any of these fields. */
+/** Case-insensitive, space-separated AND; each term may match any of these fields
+ * (docs/impl/library.md > Layout: title, source title, app, memo, date forms). */
 function matchesQuery(session: SessionSummary, query: string): boolean {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return true;
-  const haystacks = [session.customTitle, session.sourceTitle, session.sourceApp, ...sessionDateSearchForms(session.startedAt)]
+  const haystacks = [session.customTitle, session.sourceTitle, session.sourceApp, session.memo, ...sessionDateSearchForms(session.startedAt)]
     .filter((v): v is string => v != null)
     .map((v) => v.toLowerCase());
   return terms.every((term) => haystacks.some((h) => h.includes(term)));
@@ -38,9 +62,7 @@ function sessionDurationSeconds(s: SessionSummary): number {
   const start = new Date(s.startedAt).getTime();
   // A still-recording session (endedAt null) has no fixed end yet -- its "so far"
   // duration legitimately grows in real time, the same as the toolbar's own elapsed
-  // counter, so this is the one value in the list that is not frozen mock data and can
-  // read a little differently between runs. Harmless: these screenshots are for human
-  // review on a decision sheet, not pixel-diffed.
+  // counter, so this is the one value in the list that is not frozen mock data.
   const end = s.endedAt ? new Date(s.endedAt).getTime() : Date.now();
   return Math.max(0, Math.round((end - start) / 1000));
 }
@@ -62,168 +84,32 @@ function SessionBadge({ session, t }: { session: SessionSummary; t: TFunc }) {
   return null;
 }
 
-interface DetailPaneProps {
-  t: TFunc;
-  lang: Lang;
-  session: SessionDetail;
-  selectMode: boolean;
-  selectedCaptures: Set<number>;
-  onEnterSelect: () => void;
-  onExitSelect: () => void;
-  onToggleCapture: (index: number) => void;
-  onTrashSelected: () => void;
-}
-
-function SessionDetailPane({
-  t,
-  lang,
-  session,
-  selectMode,
-  selectedCaptures,
-  onEnterSelect,
-  onExitSelect,
-  onToggleCapture,
-  onTrashSelected,
-}: DetailPaneProps) {
-  const metaParts = [
-    // No "{app} の「{title}」" segment for an mp4-mode session: there is no capturing
-    // app to name (sourceApp is null), and the title above already shows the file name.
-    session.sourceApp ? t("library.source", { app: session.sourceApp, title: session.sourceTitle }) : null,
-    formatSessionRange(session.startedAt, session.endedAt, lang),
-    t("library.slideCount", { count: session.count }),
-    session.hasPdf ? t("library.hasPdf") : t("library.noPdf"),
-  ].filter((v): v is string => v != null);
-
-  return (
-    <div className="library-detail-content">
-      <div className="library-detail-head">
-        <h1 className="library-detail-title">{session.title}</h1>
-        <IconButton icon={<FiEdit2 aria-hidden="true" />} label={t("library.rename")} />
-      </div>
-      <p className="library-detail-meta tabular-nums">{metaParts.join(" · ")}</p>
-
-      {selectMode ? (
-        <div className="library-detail-actions">
-          <Button kind="primary" disabled={selectedCaptures.size === 0} onClick={onTrashSelected}>
-            {t("library.trashSelected", { count: selectedCaptures.size })}
-          </Button>
-          <Button kind="secondary" onClick={onExitSelect}>
-            {t("library.cancelSelect")}
-          </Button>
-        </div>
-      ) : (
-        <div className="library-detail-actions">
-          <Button kind="secondary">{t("library.openFolder")}</Button>
-          <Button kind="secondary">{t("library.openPdf")}</Button>
-          <Button kind="secondary">{t("library.rebuildPdf")}</Button>
-          <Button kind="secondary">{t("library.dedupe")}</Button>
-          <Button kind="secondary" onClick={onEnterSelect}>
-            {t("library.select")}
-          </Button>
-          <Button kind="secondary" className="library-btn-danger">
-            {t("library.delete")}
-          </Button>
-        </div>
-      )}
-
-      <div className="library-grid">
-        {session.captures.map((c) => {
-          const caption = t("library.caption", { index: String(c.index).padStart(3, "0"), time: formatElapsed(c.tContent) });
-          const tile = (
-            <>
-              <img src={c.thumb} alt="" className="library-tile-img" />
-              <span className="library-tile-caption tabular-nums">{caption}</span>
-            </>
-          );
-          // The checkbox's accessible name comes from the caption text inside the same
-          // label, rather than inventing a new "select image N" string the spec does not
-          // give (SPEC-QUESTION, see the report).
-          return selectMode ? (
-            <label key={c.index} className="library-tile">
-              <input
-                type="checkbox"
-                className="library-tile-check"
-                checked={selectedCaptures.has(c.index)}
-                onChange={() => onToggleCapture(c.index)}
-              />
-              {tile}
-            </label>
-          ) : (
-            <div key={c.index} className="library-tile">
-              {tile}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Loads one session's detail on demand and owns its select-mode UI state. A fresh
- * instance (keyed by `id` at both call sites below) is the reset mechanism when the
- * shown session changes -- remounting naturally returns detail/selectMode/
- * selectedCaptures to their initial values, rather than an effect calling setState
- * synchronously in its body to reset them (react-hooks/set-state-in-effect).
- */
-function SessionDetailLoader({ id, t, lang }: { id: string; t: TFunc; lang: Lang }) {
-  const [detail, setDetail] = useState<SessionDetail | null>(null);
-  const [selectMode, setSelectMode] = useState(false);
-  const [selectedCaptures, setSelectedCaptures] = useState<Set<number>>(new Set());
-
-  useEffect(() => {
-    let active = true;
-    getSession(id).then((d) => {
-      if (active) setDetail(d);
-    });
-    return () => {
-      active = false;
-    };
-  }, [id]);
-
-  function toggleCapture(index: number) {
-    setSelectedCaptures((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
-  }
-
-  function exitSelect() {
-    setSelectMode(false);
-    setSelectedCaptures(new Set());
-  }
-
-  if (!detail) return null;
-
-  return (
-    <SessionDetailPane
-      t={t}
-      lang={lang}
-      session={detail}
-      selectMode={selectMode}
-      selectedCaptures={selectedCaptures}
-      onEnterSelect={() => setSelectMode(true)}
-      onExitSelect={exitSelect}
-      onToggleCapture={toggleCapture}
-      // No-op mock function (docs/impl/library.md > What to build, item 5): nothing is
-      // actually deleted in this prototype.
-      onTrashSelected={exitSelect}
-    />
-  );
-}
-
 export default function Library() {
   const { lang, t } = useLang();
-  const layout = layoutFromLocation();
 
   const [appState, setAppState] = useState<AppState | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null); // layout A
-  const [openedId, setOpenedId] = useState<string | null>(null); // layout B
+  const [selectedDir, setSelectedDir] = useState<string | null>(null);
+  const [detail, setDetail] = useState<SessionDetail | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedCaptures, setSelectedCaptures] = useState<Set<number>>(new Set());
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [memoValue, setMemoValue] = useState("");
+  const [memoSaved, setMemoSaved] = useState(false);
+  const [confirmKind, setConfirmKind] = useState<ConfirmKind | null>(null);
+  const [notice, setNotice] = useState<ActionNotice | null>(null);
 
+  const selectedDirRef = useRef<string | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const suppressNextBlurRef = useRef(false);
+  const memoSavedForRef = useRef<string | null>(null);
+  const memoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const memoFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ---- app state (toolbar) -------------------------------------------------
   useEffect(() => {
     let active = true;
     getAppState().then((s) => {
@@ -241,28 +127,141 @@ export default function Library() {
     };
   }, []);
 
+  // ---- sessions list + selection -------------------------------------------
+  // Changes the selection and resets the other session-scoped UI state together, in
+  // one place -- called from event handlers and promise callbacks only (never
+  // synchronously inside a useEffect body, which react-hooks/set-state-in-effect
+  // rightly flags as a cascading-render anti-pattern). selectedDirRef is updated here
+  // too, synchronously, so promise callbacks elsewhere always read the latest value
+  // instead of a stale one captured at effect-setup time.
+  const selectDir = useCallback((dir: string | null) => {
+    selectedDirRef.current = dir;
+    setSelectedDir(dir);
+    setSelectMode(false);
+    setSelectedCaptures(new Set());
+    setRenaming(false);
+    setConfirmKind(null);
+    setNotice(null);
+    setMemoSaved(false);
+  }, []);
+
+  const applySessions = useCallback(
+    (list: SessionSummary[]) => {
+      setSessions(list);
+      const current = selectedDirRef.current;
+      const next = current && list.some((s) => s.dir === current) ? current : (list[0]?.dir ?? null);
+      if (next !== current) selectDir(next);
+    },
+    [selectDir]
+  );
+
   useEffect(() => {
     let active = true;
-    listSessions().then((list) => {
-      if (!active) return;
-      setSessions(list);
-      setSelectedId((current) => current ?? list[0]?.id ?? null);
-    });
+    listSessions()
+      .then((list) => {
+        if (active) applySessions(list);
+      })
+      .catch((e) => {
+        if (active) setNotice({ tone: "warning", text: errorMessage(e) });
+      });
     return () => {
       active = false;
     };
-  }, []);
+  }, [applySessions]);
+
+  // Refetches the list and (if the same session is still selected) its detail;
+  // falls back to the first remaining session when the selection disappeared.
+  const doRefetch = useCallback(async () => {
+    let list: SessionSummary[];
+    try {
+      list = await listSessions();
+    } catch (e) {
+      setNotice({ tone: "warning", text: errorMessage(e) });
+      return;
+    }
+    setSessions(list);
+    const currentDir = selectedDirRef.current;
+    if (currentDir == null || !list.some((s) => s.dir === currentDir)) {
+      selectDir(list[0]?.dir ?? null);
+      return;
+    }
+    try {
+      setDetail(await getSession(currentDir));
+    } catch {
+      selectDir(null);
+    }
+  }, [selectDir]);
+
+  // library-changed: refetch, coalesced to at most once per 300 ms (docs/impl/
+  // library.md > Commands > Events).
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let pending = false;
+
+    function run() {
+      void doRefetch();
+      timer = setTimeout(() => {
+        timer = null;
+        if (pending) {
+          pending = false;
+          run();
+        }
+      }, 300);
+    }
+
+    function onChanged() {
+      if (!active) return;
+      if (timer != null) {
+        pending = true;
+        return;
+      }
+      run();
+    }
+
+    let unlisten: (() => void) | undefined;
+    onLibraryChanged(onChanged).then((u) => {
+      unlisten = u;
+    });
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+      unlisten?.();
+    };
+  }, [doRefetch]);
+
+  // Selection changed (via selectDir, which already reset the other session-scoped UI
+  // state): load its detail. A stale `detail` from the previous selection is never
+  // shown in the meantime -- renderBody() below only renders it once detail.dir
+  // matches selectedDir -- so there is nothing to synchronously clear here.
+  useEffect(() => {
+    if (!selectedDir) return;
+    let active = true;
+    getSession(selectedDir)
+      .then((d) => {
+        if (!active) return;
+        setDetail(d);
+        memoSavedForRef.current = d.memo;
+        setMemoValue(d.memo);
+      })
+      .catch((e) => {
+        if (active) setNotice({ tone: "warning", text: errorMessage(e) });
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedDir]);
 
   const filtered = useMemo(() => (sessions ?? []).filter((s) => matchesQuery(s, query)), [sessions, query]);
 
+  // Listbox keyboard navigation (Up/Down/Home/End), as in the panel's picker -- but
+  // never while typing in a text field, or while a modal (picker/confirm) is open.
   useEffect(() => {
-    if (layout !== "split") return;
     function onKeyDown(e: KeyboardEvent) {
-      // Let arrow keys behave normally while typing in the search field (or any other
-      // input) instead of hijacking them for list navigation.
-      if (e.target instanceof HTMLInputElement) return;
+      if (pickerOpen || confirmKind != null) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (filtered.length === 0) return;
-      const idx = filtered.findIndex((s) => s.id === selectedId);
+      const idx = filtered.findIndex((s) => s.dir === selectedDir);
       let next: number | null = null;
       if (e.key === "ArrowDown") next = idx === -1 ? 0 : Math.min(idx + 1, filtered.length - 1);
       else if (e.key === "ArrowUp") next = idx === -1 ? 0 : Math.max(idx - 1, 0);
@@ -270,19 +269,180 @@ export default function Library() {
       else if (e.key === "End") next = filtered.length - 1;
       if (next === null) return;
       e.preventDefault();
-      setSelectedId(filtered[next].id);
+      selectDir(filtered[next].dir);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [layout, filtered, selectedId]);
+  }, [pickerOpen, confirmKind, filtered, selectedDir, selectDir]);
 
+  // ---- rename in place ------------------------------------------------------
+  useEffect(() => {
+    if (renaming) {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }
+  }, [renaming]);
+
+  function startRename() {
+    if (!detail) return;
+    // Starts each rename session with a clean slate: without this, a leftover `true`
+    // from a previous Enter/Escape (if that unmount never actually fired a blur event
+    // to consume it) would wrongly suppress a *later*, genuinely blur-triggered save.
+    suppressNextBlurRef.current = false;
+    setRenameValue(detail.title);
+    setRenaming(true);
+  }
+
+  function exitRenaming() {
+    suppressNextBlurRef.current = true;
+    setRenaming(false);
+  }
+
+  function commitRename() {
+    if (!detail) return;
+    const trimmed = renameValue.trim();
+    exitRenaming();
+    void renameSession(detail.dir, trimmed === "" ? null : trimmed);
+  }
+
+  function cancelRename() {
+    exitRenaming();
+  }
+
+  // ---- memo: 600ms debounce + save on blur, never the same content twice ---
+  async function commitMemo(dir: string, value: string) {
+    if (memoSavedForRef.current === value) return;
+    memoSavedForRef.current = value;
+    try {
+      await setSessionMemo(dir, value);
+      setMemoSaved(true);
+      if (memoFlashRef.current) clearTimeout(memoFlashRef.current);
+      memoFlashRef.current = setTimeout(() => setMemoSaved(false), 2000);
+    } catch (e) {
+      setNotice({ tone: "warning", text: errorMessage(e) });
+    }
+  }
+
+  function handleMemoChange(e: ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value;
+    setMemoValue(value);
+    if (!detail) return;
+    const dir = detail.dir;
+    if (memoDebounceRef.current) clearTimeout(memoDebounceRef.current);
+    memoDebounceRef.current = setTimeout(() => void commitMemo(dir, value), 600);
+  }
+
+  function handleMemoBlur() {
+    if (memoDebounceRef.current) {
+      clearTimeout(memoDebounceRef.current);
+      memoDebounceRef.current = null;
+    }
+    if (detail) void commitMemo(detail.dir, memoValue);
+  }
+
+  // ---- action row ------------------------------------------------------------
+  async function handleOpenFolder() {
+    if (!detail) return;
+    try {
+      await openSessionFolder(detail.dir);
+    } catch (e) {
+      setNotice({ tone: "warning", text: errorMessage(e) });
+    }
+  }
+
+  async function handleOpenPdf() {
+    if (!detail) return;
+    try {
+      await openSessionPdf(detail.dir);
+    } catch (e) {
+      setNotice({ tone: "warning", text: errorMessage(e) });
+    }
+  }
+
+  async function handleRebuildPdf() {
+    if (!detail) return;
+    try {
+      const count = await rebuildSessionPdf(detail.dir);
+      setNotice({ tone: "neutral", text: t("rebuild.result", { count }) });
+    } catch (e) {
+      setNotice({ tone: "warning", text: errorMessage(e) });
+    }
+  }
+
+  async function handleDedupe() {
+    if (!detail) return;
+    try {
+      const indices = await foldSession(detail.dir);
+      if (indices.length > 0) {
+        setSelectMode(true);
+        setSelectedCaptures(new Set(indices));
+        setNotice({ tone: "neutral", text: t("library.dedupeSelected", { count: indices.length }) });
+      } else {
+        setNotice({ tone: "neutral", text: t("library.dedupeNone") });
+      }
+    } catch (e) {
+      setNotice({ tone: "warning", text: errorMessage(e) });
+    }
+  }
+
+  function handleEnterSelect() {
+    setSelectMode(true);
+    setSelectedCaptures(new Set());
+    setNotice(null);
+  }
+
+  function handleExitSelect() {
+    setSelectMode(false);
+    setSelectedCaptures(new Set());
+  }
+
+  function toggleCapture(index: number) {
+    setSelectedCaptures((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }
+
+  async function handleConfirmDeleteSession() {
+    if (!detail) return;
+    setConfirmKind(null);
+    try {
+      await trashSession(detail.dir);
+    } catch (e) {
+      setNotice({ tone: "warning", text: errorMessage(e) });
+    }
+  }
+
+  async function handleConfirmTrashCaptures() {
+    if (!detail) return;
+    const indices = [...selectedCaptures];
+    setConfirmKind(null);
+    try {
+      await trashCaptures(detail.dir, indices);
+      handleExitSelect();
+    } catch (e) {
+      setNotice({ tone: "warning", text: errorMessage(e) });
+    }
+  }
+
+  async function handleRequestPermission() {
+    await requestPermission();
+    setAppState(await getAppState());
+  }
+
+  // ---- rendering --------------------------------------------------------------
   function renderToolbarStatus() {
-    const session = appState?.session;
+    if (!appState) return null;
+    const session = appState.session;
     if (!session) {
       return (
         <div className="library-toolbar-status">
           <span className="library-toolbar-state">{t("panel.statusStopped")}</span>
-          <Button kind="primary">{t("action.start")}</Button>
+          <Button kind="primary" disabled={!appState.permission.granted} onClick={() => setPickerOpen(true)}>
+            {t("action.start")}
+          </Button>
         </div>
       );
     }
@@ -293,13 +453,175 @@ export default function Library() {
           {isPaused ? t("panel.statusPaused", { count: session.count }) : t("panel.statusRunning", { count: session.count })}
         </span>
         <span className="library-toolbar-elapsed tabular-nums">{formatElapsed(session.elapsedS)}</span>
-        <Button kind="secondary">{isPaused ? t("action.resume") : t("action.pause")}</Button>
-        <Button kind="primary">{t("action.stop")}</Button>
+        <Button kind="secondary" onClick={() => void (isPaused ? resumeSession() : pauseSession())}>
+          {isPaused ? t("action.resume") : t("action.pause")}
+        </Button>
+        <Button kind="primary" onClick={() => void stopSession()}>
+          {t("action.stop")}
+        </Button>
       </div>
     );
   }
 
-  function renderSplitBody() {
+  function renderDetail(session: SessionDetail) {
+    const metaParts = [
+      // No "{app} の「{title}」" segment for an mp4-mode session: there is no capturing
+      // app to name (sourceApp is null), and the title above already shows the file name.
+      session.sourceApp ? t("library.source", { app: session.sourceApp, title: session.sourceTitle }) : null,
+      formatSessionRange(session.startedAt, session.endedAt, lang),
+      t("library.slideCount", { count: session.count }),
+      session.hasPdf ? t("library.hasPdf") : t("library.noPdf"),
+    ].filter((v): v is string => v != null);
+
+    return (
+      <div className="library-detail-content">
+        <div className="library-detail-head">
+          {renaming ? (
+            <input
+              ref={renameInputRef}
+              type="text"
+              className="library-rename-input"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitRename();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  cancelRename();
+                }
+              }}
+              onBlur={() => {
+                if (suppressNextBlurRef.current) {
+                  suppressNextBlurRef.current = false;
+                  return;
+                }
+                commitRename();
+              }}
+              aria-label={t("library.rename")}
+            />
+          ) : (
+            <>
+              <h1 className="library-detail-title">{session.title}</h1>
+              <IconButton icon={<FiEdit2 aria-hidden="true" />} label={t("library.rename")} onClick={startRename} />
+            </>
+          )}
+        </div>
+        <p className="library-detail-meta tabular-nums">{metaParts.join(" · ")}</p>
+
+        <div className="library-memo">
+          <label htmlFor="library-memo-field" className="library-memo-label">
+            {t("library.memo")}
+          </label>
+          <textarea
+            id="library-memo-field"
+            className="library-memo-field"
+            placeholder={t("library.memoPlaceholder")}
+            value={memoValue}
+            onChange={handleMemoChange}
+            onBlur={handleMemoBlur}
+          />
+          {memoSaved && (
+            <span className="library-memo-saved" role="status">
+              {t("library.saved")}
+            </span>
+          )}
+        </div>
+
+        {session.recording ? (
+          <div className="library-detail-actions">
+            <Button kind="secondary" onClick={() => void handleOpenFolder()}>
+              {t("library.openFolder")}
+            </Button>
+          </div>
+        ) : selectMode ? (
+          <div className="library-detail-actions">
+            <Button kind="primary" disabled={selectedCaptures.size === 0} onClick={() => setConfirmKind("trashCaptures")}>
+              {t("library.trashSelected", { count: selectedCaptures.size })}
+            </Button>
+            <Button kind="secondary" onClick={handleExitSelect}>
+              {t("library.cancelSelect")}
+            </Button>
+          </div>
+        ) : (
+          <div className="library-detail-actions">
+            <Button kind="secondary" onClick={() => void handleOpenFolder()}>
+              {t("library.openFolder")}
+            </Button>
+            {session.hasPdf && (
+              <Button kind="secondary" onClick={() => void handleOpenPdf()}>
+                {t("library.openPdf")}
+              </Button>
+            )}
+            <Button kind="secondary" onClick={() => void handleRebuildPdf()}>
+              {t("library.rebuildPdf")}
+            </Button>
+            <Button kind="secondary" onClick={() => void handleDedupe()}>
+              {t("library.dedupe")}
+            </Button>
+            <Button kind="secondary" onClick={handleEnterSelect}>
+              {t("library.select")}
+            </Button>
+            <Button kind="secondary" className="library-btn-danger" onClick={() => setConfirmKind("delete")}>
+              {t("library.delete")}
+            </Button>
+          </div>
+        )}
+
+        {session.recording && <p className="library-recording-note">{t("library.recordingLocked")}</p>}
+
+        {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
+
+        <div className="library-grid">
+          {session.captures.map((c) => {
+            const caption = t("library.caption", { index: String(c.index).padStart(3, "0"), time: formatElapsed(c.tContent) });
+            const img = <img src={thumbUrl(c.path, TILE_THUMB_WIDTH)} alt="" loading="lazy" className="library-tile-img" />;
+            const captionEl = (
+              <span className="library-tile-caption tabular-nums">{caption}</span>
+            );
+            return selectMode ? (
+              <label key={c.index} className="library-tile">
+                {/* A solid chip behind the checkbox, not just the bare input: a real
+                    capture's own content can sit anywhere, including this corner (as
+                    this mock's own "Slide N" title did -- caught by looking at the
+                    screenshot, not by any test), so the checkbox needs its own opaque
+                    backing to stay legible regardless of what is under it. */}
+                <span className="library-tile-check-wrap">
+                  <input
+                    type="checkbox"
+                    className="library-tile-check"
+                    checked={selectedCaptures.has(c.index)}
+                    onChange={() => toggleCapture(c.index)}
+                  />
+                </span>
+                {img}
+                {captionEl}
+              </label>
+            ) : (
+              <button key={c.index} type="button" className="library-tile library-tile-button" onClick={() => void openCapture(c.path)}>
+                {img}
+                {captionEl}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  function renderBody() {
+    if (sessions === null) return <div className="library-body" />;
+    if (sessions.length === 0) {
+      return (
+        <div className="library-empty-state">
+          <p>{t("library.empty")}</p>
+          <Button kind="primary" disabled={!appState?.permission.granted} onClick={() => setPickerOpen(true)}>
+            {t("action.start")}
+          </Button>
+        </div>
+      );
+    }
     return (
       <div className="library-body">
         <div className="library-list-col">
@@ -322,27 +644,28 @@ export default function Library() {
             <ul
               role="listbox"
               aria-labelledby="library-search-label"
-              aria-activedescendant={selectedId ? `library-option-${selectedId}` : undefined}
+              aria-activedescendant={selectedDir ? `library-option-${selectedDir}` : undefined}
               tabIndex={0}
               className="library-list"
             >
               {filtered.map((s) => (
                 // Keyboard interaction is handled globally above (Arrow/Home/End) via
-                // aria-activedescendant, the same listbox pattern as Panel's picker; the
-                // click handler is the mouse equivalent, so no key handler is needed here.
-                // Click rather than Panel's hover-to-preselect: this is a persistent
-                // master-detail list someone may leave open, not a short-lived picker, so
-                // changing the detail pane just by passing the mouse over it would surprise.
+                // aria-activedescendant, the same listbox pattern as the window picker;
+                // the click handler is the mouse equivalent, so no key handler is needed.
                 // eslint-disable-next-line jsx-a11y/click-events-have-key-events
                 <li
-                  key={s.id}
-                  id={`library-option-${s.id}`}
+                  key={s.dir}
+                  id={`library-option-${s.dir}`}
                   role="option"
-                  aria-selected={s.id === selectedId}
-                  className={s.id === selectedId ? "library-row is-selected" : "library-row"}
-                  onClick={() => setSelectedId(s.id)}
+                  aria-selected={s.dir === selectedDir}
+                  className={s.dir === selectedDir ? "library-row is-selected" : "library-row"}
+                  onClick={() => selectDir(s.dir)}
                 >
-                  {s.thumb ? <img src={s.thumb} alt="" className="library-row-thumb" /> : <span className="library-row-thumb" />}
+                  {s.thumbPath ? (
+                    <img src={thumbUrl(s.thumbPath, LIST_THUMB_WIDTH)} alt="" loading="lazy" className="library-row-thumb" />
+                  ) : (
+                    <span className="library-row-thumb" />
+                  )}
                   <span className="library-row-main">
                     <span className="library-row-title">{s.title}</span>
                     <span className="library-row-meta tabular-nums">
@@ -355,65 +678,7 @@ export default function Library() {
             </ul>
           )}
         </div>
-        <div className="library-detail-pane">{selectedId && <SessionDetailLoader key={selectedId} id={selectedId} t={t} lang={lang} />}</div>
-      </div>
-    );
-  }
-
-  function renderListBody() {
-    if (openedId) {
-      return (
-        <div className="library-detail-pane">
-          <Button kind="secondary" className="library-back-btn" onClick={() => setOpenedId(null)}>
-            {t("action.back")}
-          </Button>
-          <SessionDetailLoader key={openedId} id={openedId} t={t} lang={lang} />
-        </div>
-      );
-    }
-    return (
-      <div className="library-body-list">
-        <div className="library-search-wrap library-search-wrap-wide">
-          <label htmlFor="library-search" id="library-search-label" className="visually-hidden">
-            {t("library.search")}
-          </label>
-          <input
-            id="library-search"
-            type="search"
-            className="library-search"
-            placeholder={t("library.search")}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        {filtered.length === 0 ? (
-          <p className="library-empty-hint">{t("library.noHits")}</p>
-        ) : (
-          filtered.map((s) => (
-            <div key={s.id} className="library-row-wide">
-              {s.thumb ? <img src={s.thumb} alt="" className="library-row-wide-thumb" /> : <span className="library-row-wide-thumb" />}
-              <div className="library-row-wide-main">
-                <p className="library-row-wide-title">{s.title}</p>
-                <p className="library-row-wide-meta tabular-nums">
-                  {sessionMetaLine(s, lang, t)}
-                  <SessionBadge session={s} t={t} />
-                </p>
-              </div>
-              <div className="library-row-wide-actions">
-                <button type="button" className="library-text-btn" onClick={() => setOpenedId(s.id)}>
-                  {t("library.open")}
-                </button>
-                <button type="button" className="library-text-btn">
-                  {t("library.folder")}
-                </button>
-                <button type="button" className="library-text-btn">
-                  {t("library.pdf")}
-                </button>
-                <IconButton icon={<FiTrash2 aria-hidden="true" />} label={t("library.delete")} className="library-icon-btn-danger" />
-              </div>
-            </div>
-          ))
-        )}
+        <div className="library-detail-pane">{detail && detail.dir === selectedDir && renderDetail(detail)}</div>
       </div>
     );
   }
@@ -427,19 +692,59 @@ export default function Library() {
           <IconButton icon={<FiSettings aria-hidden="true" />} label={t("action.openSettings")} onClick={() => void openSettings()} />
         </div>
       </header>
-      {sessions && sessions.length === 0 ? (
-        <div className="library-empty-state">
-          <p>{t("library.empty")}</p>
-          <Button kind="primary">{t("action.start")}</Button>
+
+      {appState && !appState.permission.granted && (
+        <div className="library-permission-notice">
+          <Notice>{t("permission.notice")}</Notice>
+          <div className="library-permission-actions">
+            <Button kind="secondary" onClick={() => void openPermissionSettings()}>
+              {t("permission.openSettings")}
+            </Button>
+            <Button kind="secondary" onClick={() => void handleRequestPermission()}>
+              {t("permission.check")}
+            </Button>
+          </div>
         </div>
-      ) : sessions ? (
-        layout === "list" ? (
-          renderListBody()
-        ) : (
-          renderSplitBody()
-        )
-      ) : (
-        <div className="library-body" />
+      )}
+
+      {renderBody()}
+
+      {pickerOpen && (
+        <Modal titleId="window-picker-heading" onClose={() => setPickerOpen(false)}>
+          <WindowPicker onPicked={() => setPickerOpen(false)} onCancel={() => setPickerOpen(false)} />
+        </Modal>
+      )}
+
+      {confirmKind === "delete" && detail && (
+        <Modal titleId="library-confirm-delete-text" onClose={() => setConfirmKind(null)}>
+          <p id="library-confirm-delete-text" className="library-confirm-message">
+            {t("library.confirmDelete", { title: detail.title })}
+          </p>
+          <div className="library-confirm-actions">
+            <Button kind="primary" className="library-btn-confirm-danger" onClick={() => void handleConfirmDeleteSession()}>
+              {t("library.confirmDeleteButton")}
+            </Button>
+            <Button kind="secondary" onClick={() => setConfirmKind(null)}>
+              {t("library.cancel")}
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {confirmKind === "trashCaptures" && (
+        <Modal titleId="library-confirm-trash-text" onClose={() => setConfirmKind(null)}>
+          <p id="library-confirm-trash-text" className="library-confirm-message">
+            {t("library.confirmTrashImages", { count: selectedCaptures.size })}
+          </p>
+          <div className="library-confirm-actions">
+            <Button kind="primary" className="library-btn-confirm-danger" onClick={() => void handleConfirmTrashCaptures()}>
+              {t("library.confirmDeleteButton")}
+            </Button>
+            <Button kind="secondary" onClick={() => setConfirmKind(null)}>
+              {t("library.cancel")}
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   );

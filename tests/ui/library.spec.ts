@@ -9,9 +9,9 @@ test.beforeAll(() => {
   ensureResultsDir();
 });
 
-// docs/impl/library.md's mock session #2 ("第1回授業スライド.mp4", 36 slides) -- selecting
-// it is what makes the detail pane show 36 thumbnails for the "a"/"a-narrow" screenshots.
-async function selectSecondSession(page: Page): Promise<void> {
+// src/ipc/mock.ts's "第1回授業スライド.mp4" sample session (36 slides) -- selecting it is
+// what makes the detail pane show 36 thumbnails below.
+async function selectSession(page: Page): Promise<void> {
   await page.getByRole("option", { name: /第1回授業スライド\.mp4/ }).click();
   await expect(page.locator(".library-tile")).toHaveCount(36);
 }
@@ -24,44 +24,43 @@ async function checkAndScreenshot(page: Page, name: string): Promise<void> {
 }
 
 for (const theme of THEMES) {
-  test.describe(`library layout A, 1280x800 (${theme})`, () => {
+  test.describe(`library, 1280x800 (${theme})`, () => {
     test.use({ viewport: WIDE, colorScheme: theme });
 
-    test("a", async ({ page }) => {
+    test("layout A", async ({ page }) => {
       await page.goto("/?preset=stopped#/library");
       await page.getByTestId("library-root").waitFor();
-      await selectSecondSession(page);
+      await selectSession(page);
       await checkAndScreenshot(page, `a-${theme}`);
     });
-  });
 
-  test.describe(`library layout A, 760x600 (${theme})`, () => {
-    test.use({ viewport: NARROW, colorScheme: theme });
-
-    test("a-narrow", async ({ page }) => {
+    test("confirm dialog open", async ({ page }) => {
       await page.goto("/?preset=stopped#/library");
       await page.getByTestId("library-root").waitFor();
-      await selectSecondSession(page);
-      await checkAndScreenshot(page, `a-narrow-${theme}`);
+      await selectSession(page);
+      await page.getByRole("button", { name: "削除…" }).click();
+      await page.getByRole("dialog").waitFor();
+      await checkAndScreenshot(page, `confirm-${theme}`);
+    });
+
+    test("select mode", async ({ page }) => {
+      await page.goto("/?preset=stopped#/library");
+      await page.getByTestId("library-root").waitFor();
+      await selectSession(page);
+      await page.getByRole("button", { name: "画像を選ぶ" }).click();
+      await page.getByRole("checkbox").first().waitFor();
+      await checkAndScreenshot(page, `select-${theme}`);
     });
   });
 
-  test.describe(`library layout B, 1280x800 (${theme})`, () => {
-    test.use({ viewport: WIDE, colorScheme: theme });
+  test.describe(`library, 760x600 (${theme})`, () => {
+    test.use({ viewport: NARROW, colorScheme: theme });
 
-    test("b", async ({ page }) => {
-      await page.goto("/?preset=stopped&layout=list#/library");
+    test("layout A narrow", async ({ page }) => {
+      await page.goto("/?preset=stopped#/library");
       await page.getByTestId("library-root").waitFor();
-      await page.getByRole("button", { name: "開く" }).first().waitFor();
-      await checkAndScreenshot(page, `b-${theme}`);
-    });
-
-    test("b-open", async ({ page }) => {
-      await page.goto("/?preset=stopped&layout=list#/library");
-      await page.getByTestId("library-root").waitFor();
-      await page.getByRole("button", { name: "開く" }).first().click();
-      await page.getByRole("button", { name: "戻る" }).waitFor();
-      await checkAndScreenshot(page, `b-open-${theme}`);
+      await selectSession(page);
+      await checkAndScreenshot(page, `a-narrow-${theme}`);
     });
   });
 }

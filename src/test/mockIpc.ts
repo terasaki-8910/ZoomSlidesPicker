@@ -33,8 +33,20 @@ export function createIpcMock() {
     fitPanel: vi.fn(),
     onAppState: vi.fn(),
     onSettings: vi.fn(),
+    openLibrary: vi.fn(),
     listSessions: vi.fn(),
     getSession: vi.fn(),
+    openSessionFolder: vi.fn(),
+    openSessionPdf: vi.fn(),
+    rebuildSessionPdf: vi.fn(),
+    renameSession: vi.fn(),
+    setSessionMemo: vi.fn(),
+    trashSession: vi.fn(),
+    trashCaptures: vi.fn(),
+    foldSession: vi.fn(),
+    openCapture: vi.fn(),
+    onLibraryChanged: vi.fn(),
+    thumbUrl: vi.fn(),
   };
 }
 
