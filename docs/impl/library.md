@@ -150,3 +150,30 @@ states, keyboard selection), `sh scripts/ui-check.sh` with a new `tests/ui/libra
 axe has no violations and there is no horizontal overflow, for layout A at 1280 x 800 and
 760 x 600 and layout B at 1280 x 800 (list and opened), each light and dark; screenshots go
 to `test-results/ui/library-*.png`.
+
+## After GO: implementation outline (draft, the parts no round 3 answer changes)
+
+Rust (new module `src-tauri/src/library.rs`, data helpers in `zsp-output`):
+- Session roots: the current save root plus every save root used before (settings gain
+  `knownRoots: string[]`, appended when the save root changes). `list_sessions` scans each
+  root's direct subfolders for `session.json`, newest first; unreadable folders are skipped.
+- `SessionSummary` from session.json: title = `title` (new optional field, written by
+  rename) or source title; count = captures whose PNG still exists; hasPdf = slides.pdf
+  exists; recording = the folder of the active session.
+- Thumbnails: JPEG 320 px wide in the app cache dir (`<cache>/thumbs/<session id>/<file>.jpg`),
+  made on first request in a background thread; the webview gets them through the asset
+  protocol scoped to the cache dir only (capability change: `core:default` stays; add the
+  asset protocol scope in tauri.conf.json, nothing else).
+- Actions: open folder / open PDF (opener), rebuild PDF (`zsp_output::rebuild_pdf`, any
+  session), rename (rewrite session.json `title` atomically), delete session (trash the
+  folder), delete images (trash the PNGs, drop them from session.json, rebuild the PDF),
+  merge duplicate slides (run the detector over the session's PNGs as in
+  `crates/zsp-detect/examples/dedupe_session.rs`, return the files it would not keep as a
+  pre-selection; nothing is deleted until the user confirms).
+- Window: label `library`; opening it switches macOS to `ActivationPolicy::Regular` (Dock and
+  Cmd-Tab); closing the last library window switches back to `Accessory`. Reopen (Finder,
+  Spotlight, Dock) opens it (if R3-8 a). Tray menu gains `履歴…`; the panel header gains a
+  history IconButton.
+- The toolbar's start: opens the window picker as a dialog inside the library window
+  (reusing the panel's picker component), then the region window, as from the panel.
+- session.json schema: optional `title` (string) and, if R3-7 includes memo, `memo`.
