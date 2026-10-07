@@ -87,3 +87,24 @@ export interface RegionSel {
   w: number;
   h: number;
 }
+
+// ---- Library (history) window: docs/impl/library.md > Data ----------------
+
+export interface SessionSummary {
+  id: string; // folder name, e.g. "2026-10-07_1242"
+  title: string; // custom name, else source title
+  customTitle: string | null;
+  sourceApp: string | null; // e.g. "Safari"; null for mp4
+  sourceTitle: string; // window title or video file name
+  sourceKind: "window" | "mp4";
+  startedAt: string; // RFC 3339
+  endedAt: string | null; // null while recording
+  count: number;
+  hasPdf: boolean;
+  recording: boolean;
+  thumb: string | null; // data URL of the first slide (small), null when count is 0
+}
+
+export interface SessionDetail extends SessionSummary {
+  captures: { index: number; file: string; tContent: number; thumb: string }[];
+}

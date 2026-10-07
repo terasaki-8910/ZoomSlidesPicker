@@ -9,7 +9,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import * as mock from "./mock";
-import type { AppState, RegionSel, Settings, SettingsView, Snapshot, WindowEntry } from "./types";
+import type { AppState, RegionSel, SessionDetail, SessionSummary, Settings, SettingsView, Snapshot, WindowEntry } from "./types";
 
 const useMock = import.meta.env.VITE_IPC_MOCK === "1";
 
@@ -111,4 +111,14 @@ export function onAppState(cb: (state: AppState) => void): Promise<UnlistenFn> {
 
 export function onSettings(cb: (settings: SettingsView) => void): Promise<UnlistenFn> {
   return useMock ? mock.onSettings(cb) : listen<SettingsView>("settings", (e) => cb(e.payload));
+}
+
+// ---- Library (history) window: docs/impl/library.md > Data. Prototype only -- the
+// Rust commands below do not exist yet (the real branch is written for when they do).
+export function listSessions(): Promise<SessionSummary[]> {
+  return useMock ? mock.listSessions() : invoke("list_sessions");
+}
+
+export function getSession(id: string): Promise<SessionDetail> {
+  return useMock ? mock.getSession(id) : invoke("get_session", { id });
 }

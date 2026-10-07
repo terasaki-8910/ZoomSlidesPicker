@@ -13,7 +13,9 @@ import type {
   LangSetting,
   PermissionView,
   RegionSel,
+  SessionDetail,
   SessionState,
+  SessionSummary,
   SessionView,
   Settings,
   SettingsView,
@@ -64,6 +66,48 @@ function snapshotImage(width: number, height: number, label: string): string {
 
 function captureThumb(count: number): string {
   return slideSvg(280, 158, `Lecture video (slide ${count})`, [0.55, 0.72, 0.35, 0.6, 0.42]);
+}
+
+/**
+ * A varied "slide" thumbnail for the library (history) window's mock sessions: a white
+ * background, a title text line, three to five grey body bars, and -- on roughly a
+ * third of slides, for visual variety -- an outlined box standing in for an embedded
+ * image or chart (docs/impl/library.md > Data). Colours here (white/dimgray/lightgray/
+ * darkgray) describe this SVG's own fixed, light pixel content, not a themed UI
+ * surface, so design_brief.md's "colours only via tokens" rule does not apply to them,
+ * same as slideSvg() above; scripts/lint-text.mjs only forbids colour *literals*
+ * (hex/rgb/hsl), not named CSS colours. Deterministic in `seed` (no Math.random()), so
+ * output -- and therefore every screenshot -- is stable across renders and test runs.
+ */
+function librarySlideSvg(seed: number, titleText: string, width = 320, height = 180): string {
+  const pad = Math.round(width * 0.08);
+  const titleY = pad + Math.round(height * 0.14);
+  const barCount = 3 + (seed % 3); // 3-5
+  const barHeight = Math.max(4, Math.round(height * 0.06));
+  const barGap = Math.round(height * 0.055);
+  const bodyTop = titleY + Math.round(height * 0.12);
+  const hasBox = seed % 3 === 1; // "sometimes a box"
+  const boxW = Math.round(width * 0.3);
+  const boxH = Math.round(height * 0.34);
+  const barAreaWidth = hasBox ? width - pad * 2 - boxW - Math.round(width * 0.04) : width - pad * 2;
+
+  const bars = Array.from({ length: barCount }, (_, i) => {
+    const frac = 0.5 + (((seed + i) * 7) % 5) * 0.09; // cosmetic per-bar width variation
+    const y = bodyTop + i * (barHeight + barGap);
+    return `<rect x="${pad}" y="${y}" width="${Math.round(barAreaWidth * Math.min(1, frac))}" height="${barHeight}" rx="${Math.round(barHeight / 3)}" fill="lightgray" />`;
+  }).join("");
+
+  const box = hasBox
+    ? `<rect x="${width - pad - boxW}" y="${bodyTop}" width="${boxW}" height="${boxH}" fill="none" stroke="darkgray" stroke-width="2" />`
+    : "";
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <rect width="${width}" height="${height}" fill="white" />
+    <text x="${pad}" y="${titleY}" font-family="sans-serif" font-size="${Math.max(11, Math.round(height * 0.1))}" font-weight="bold" fill="dimgray">${escapeXml(titleText)}</text>
+    ${bars}
+    ${box}
+  </svg>`;
+  return svgDataUrl(svg);
 }
 
 // ---- sample entries ---------------------------------------------------
@@ -374,6 +418,170 @@ export async function closeWindow(): Promise<void> {}
 // docs/impl/ipc.md > fit_panel); the last height is left on <html> for the UI checks.
 export async function fitPanel(height: number): Promise<void> {
   document.documentElement.dataset.fitPanel = String(height);
+}
+
+// ---- Library (history) window: docs/impl/library.md > Data. Six invented sessions;
+// no real lecture content. Independent of the appState/session above -- the library
+// toolbar reuses that same mock state (see Library.tsx), but this list is its own,
+// separate piece of mock data, as docs/impl/library.md > Prototype scope describes.
+
+interface SessionSeed {
+  id: string;
+  customTitle: string | null;
+  sourceApp: string | null;
+  sourceTitle: string;
+  sourceKind: "window" | "mp4";
+  startedAt: string; // RFC 3339, Asia/Tokyo (+09:00) -- see lib/format.ts's comment on why
+  endedAt: string | null;
+  count: number;
+  hasPdf: boolean;
+  recording: boolean;
+}
+
+// A fixed "now" (rather than `new Date()`) for the one still-recording session's
+// duration, so its mock meta line -- and every screenshot that shows it -- is the same
+// on every run, not just whenever the suite happens to execute.
+const MOCK_NOW = "2026-10-07T15:00:00+09:00";
+
+const SESSION_SEEDS: SessionSeed[] = [
+  {
+    id: "2026-10-07_1410",
+    customTitle: null,
+    sourceApp: "Safari",
+    sourceTitle: "第2回授業スライド.mp4",
+    sourceKind: "window",
+    startedAt: "2026-10-07T14:10:00+09:00",
+    endedAt: null,
+    count: 12,
+    hasPdf: false,
+    recording: true,
+  },
+  {
+    id: "2026-10-07_1242",
+    customTitle: null,
+    sourceApp: "Safari",
+    sourceTitle: "第1回授業スライド.mp4",
+    sourceKind: "window",
+    startedAt: "2026-10-07T12:42:00+09:00",
+    endedAt: "2026-10-07T13:15:00+09:00",
+    count: 36,
+    hasPdf: true,
+    recording: false,
+  },
+  // SPEC-QUESTION: docs/impl/library.md calls this one's name a "custom name"
+  // explicitly; the next entry gives a second name the same way but without that
+  // label. Read both as the same shape (a custom name over a generic "Zoom
+  // ミーティング" source title) -- see this file's header comment and the report.
+  {
+    id: "2026-10-03_1030",
+    customTitle: "デジタル人文学 第1回",
+    sourceApp: "zoom.us",
+    sourceTitle: "Zoom ミーティング",
+    sourceKind: "window",
+    startedAt: "2026-10-03T10:30:00+09:00",
+    endedAt: "2026-10-03T12:00:00+09:00",
+    count: 58,
+    hasPdf: true,
+    recording: false,
+  },
+  {
+    id: "2026-10-02_1300",
+    customTitle: "統計学特論",
+    sourceApp: "zoom.us",
+    sourceTitle: "Zoom ミーティング",
+    sourceKind: "window",
+    startedAt: "2026-10-02T13:00:00+09:00",
+    endedAt: "2026-10-02T14:30:00+09:00",
+    count: 41,
+    hasPdf: true,
+    recording: false,
+  },
+  // SPEC-QUESTION: the spec gives a date but no time of day for this entry and the
+  // next one; invented a plausible start/end (see the report).
+  {
+    id: "2026-10-01_0900",
+    customTitle: null,
+    sourceApp: null, // mp4 mode: no source app (types.ts)
+    sourceTitle: "lecture_2026-10-01.mp4",
+    sourceKind: "mp4",
+    startedAt: "2026-10-01T09:00:00+09:00",
+    endedAt: "2026-10-01T10:15:00+09:00",
+    count: 22,
+    hasPdf: true,
+    recording: false,
+  },
+  {
+    id: "2026-09-30_1000",
+    customTitle: null,
+    sourceApp: "Microsoft Edge",
+    sourceTitle: "情報処理演習 - Microsoft Stream",
+    sourceKind: "window",
+    startedAt: "2026-09-30T10:00:00+09:00",
+    endedAt: "2026-09-30T10:02:00+09:00",
+    count: 0,
+    hasPdf: false,
+    recording: false,
+  },
+];
+
+function seedDurationSeconds(seed: SessionSeed): number {
+  const start = new Date(seed.startedAt).getTime();
+  const end = new Date(seed.endedAt ?? MOCK_NOW).getTime();
+  return Math.max(0, Math.round((end - start) / 1000));
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Captures spaced evenly across the session, from t=0 to t=totalSeconds. */
+function buildCaptures(count: number, totalSeconds: number): SessionDetail["captures"] {
+  return Array.from({ length: count }, (_, i) => {
+    const index = i + 1;
+    const tContent = count > 1 ? Math.round((i * totalSeconds) / (count - 1)) : 0;
+    const hh = Math.floor(tContent / 3600);
+    const mm = Math.floor((tContent % 3600) / 60);
+    const ss = tContent % 60;
+    // ACCEPTANCE B2 / docs/session.schema.json's capture file pattern: NNN_hh-mm-ss.png.
+    const file = `${String(index).padStart(3, "0")}_${pad2(hh)}-${pad2(mm)}-${pad2(ss)}.png`;
+    return { index, file, tContent, thumb: librarySlideSvg(index, `Slide ${index}`) };
+  });
+}
+
+interface SessionRecord {
+  summary: SessionSummary;
+  captures: SessionDetail["captures"];
+}
+
+const SESSION_RECORDS: SessionRecord[] = SESSION_SEEDS.map((seed) => {
+  const captures = seed.count > 0 ? buildCaptures(seed.count, seedDurationSeconds(seed)) : [];
+  const summary: SessionSummary = {
+    id: seed.id,
+    title: seed.customTitle ?? seed.sourceTitle,
+    customTitle: seed.customTitle,
+    sourceApp: seed.sourceApp,
+    sourceTitle: seed.sourceTitle,
+    sourceKind: seed.sourceKind,
+    startedAt: seed.startedAt,
+    endedAt: seed.endedAt,
+    count: seed.count,
+    hasPdf: seed.hasPdf,
+    recording: seed.recording,
+    thumb: captures[0]?.thumb ?? null,
+  };
+  return { summary, captures };
+});
+
+export async function listSessions(): Promise<SessionSummary[]> {
+  return [...SESSION_RECORDS]
+    .sort((a, b) => new Date(b.summary.startedAt).getTime() - new Date(a.summary.startedAt).getTime())
+    .map((r) => r.summary);
+}
+
+export async function getSession(id: string): Promise<SessionDetail> {
+  const record = SESSION_RECORDS.find((r) => r.summary.id === id);
+  if (!record) throw new Error(`unknown session: ${id}`);
+  return { ...record.summary, captures: record.captures };
 }
 
 export async function onAppState(cb: (state: AppState) => void): Promise<UnlistenFn> {

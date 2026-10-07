@@ -33,6 +33,8 @@ export function createIpcMock() {
     fitPanel: vi.fn(),
     onAppState: vi.fn(),
     onSettings: vi.fn(),
+    listSessions: vi.fn(),
+    getSession: vi.fn(),
   };
 }
 

@@ -57,4 +57,36 @@ export const ja = {
   "settings.recording": "キーを押してください（Esc で取り消し）",
   "settings.shortcut.pauseResume": "一時停止と再開",
   "settings.saved": "保存しました",
+
+  // Library (history) window prototype -- docs/impl/library.md > Wording, copied
+  // verbatim, plus two SPEC-QUESTION additions the table did not list (see en.ts).
+  "library.search": "題名・日付・アプリで検索",
+  "library.meta": "{date} · {duration} · {count} 枚",
+  "library.recording": "記録中",
+  "library.noPdf": "PDF なし",
+  "library.hasPdf": "PDF あり",
+  "library.source": "{app} の「{title}」",
+  "library.rename": "名前を変更",
+  "library.openFolder": "フォルダを開く",
+  "library.openPdf": "PDF を開く",
+  "library.rebuildPdf": "PDF を作り直す",
+  "library.dedupe": "同じスライドをまとめる…",
+  "library.select": "画像を選ぶ",
+  "library.trashSelected": "選んだ画像をごみ箱へ（{count} 枚）",
+  "library.cancelSelect": "やめる",
+  "library.delete": "削除…",
+  "library.open": "開く",
+  "library.folder": "フォルダ",
+  "library.empty": "まだ記録はありません。授業の窓を選んで開始すると、ここに並びます。",
+  "library.noHits": "見つかりませんでした。",
+  "library.caption": "{index} · {time}",
+  // SPEC-QUESTION: not in the wording table. The detail pane's meta line needs the
+  // "{count} 枚" fragment on its own (it has a 4th segment, PDF status, after it, so it
+  // cannot reuse library.meta's fixed template) -- text taken verbatim from that
+  // template's own tail, not newly invented wording.
+  "library.slideCount": "{count} 枚",
+  // SPEC-QUESTION: not in the wording table. Layout B's row action is a bare "PDF" text
+  // button (shorter than the detail pane's "PDF を開く"), per the spec's own prose
+  // ("the actions as text buttons 開く, フォルダ, PDF"); taken verbatim from there.
+  "library.pdf": "PDF",
 } as const;
