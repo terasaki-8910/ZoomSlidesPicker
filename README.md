@@ -48,6 +48,10 @@
 
 初めて撮るときに「画面収録」の許可が要る。パネルの案内から「システム設定」を開いて ZoomSlidesPicker を許可し、アプリを再起動する。macOS 15 以降は、許可の確認が月に一度ほど出ることがある。
 
+## 入手
+
+[GitHub Releases](https://github.com/terasaki-8910/ZoomSlidesPicker/releases) に Mac（Apple シリコン）の DMG と Windows（x64）のインストーラーを置いている。
+
 ## 既知の制約
 
 - 主催者がキャプチャ防止を有効にした授業（Zoom の「画面キャプチャの防止」など）は撮れない。黒や灰色の画面として通知される。

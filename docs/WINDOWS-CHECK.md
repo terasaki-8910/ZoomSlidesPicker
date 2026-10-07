@@ -86,3 +86,16 @@ XWIN_CACHE_DIR="$HOME/Library/Caches/cargo-xwin" PATH="/opt/homebrew/opt/llvm/bi
 ```
 
 cargo-xwin は初回に Microsoft の Windows SDK と CRT をダウンロードする（Microsoft のライセンスの下で）。インストーラーは NSIS だけ（MSI は Windows でないと作れない）。署名はしていない。
+
+## リリース（開発の控え）
+
+Mac の DMG（`CARGO_TARGET_DIR=$PWD/target-dmg pnpm tauri build --bundles dmg`）と、上のインストーラーを作ってから:
+
+```sh
+git tag -a v<版> -m "ZoomSlidesPicker <版>"
+git push origin main && git push origin v<版>
+gh release create v<版> target-dmg/release/bundle/dmg/ZoomSlidesPicker_<版>_aarch64.dmg \
+  target/x86_64-pc-windows-msvc/release/bundle/nsis/ZoomSlidesPicker_<版>_x64-setup.exe \
+  --title "ZoomSlidesPicker <版>" --notes-file <変更点のメモ>
+```
+
