@@ -1,4 +1,5 @@
-//! ACCEPTANCE B2-B7, B9 and B10: files, session.json, PDF, undo, rebuild, replace.
+//! ACCEPTANCE B2-B7, B9, B10, B11 and B12: files, session.json, PDF, undo, rebuild,
+//! replace, meta.json, trashing captures.
 
 use std::fs;
 use std::io;
@@ -7,9 +8,9 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Local, TimeZone};
 use serde_json::Value;
 use zsp_output::{
-    CaptureReason, EventKind, PDF_FILE, RegionRecord, SESSION_FILE, SessionMeta, SessionWriter,
-    Source, SourceKind, Trash, capture_file_name, create_session_dir, rebuild_pdf,
-    session_dir_name,
+    CaptureReason, EventKind, PDF_FILE, RegionRecord, SESSION_FILE, SessionMeta, SessionMetaFile,
+    SessionWriter, Source, SourceKind, Trash, capture_file_name, create_session_dir, read_meta,
+    rebuild_pdf, session_dir_name, trash_captures, write_meta,
 };
 
 fn started() -> DateTime<Local> {
@@ -450,6 +451,108 @@ fn b9_rebuild_pdf_from_remaining_images() {
         before,
         "nothing is written when no images are left"
     );
+}
+
+/// B11: meta.json defaults when missing, round-trips atomically with no temp file left
+/// behind, and trims a title down to `None` when it is empty or only whitespace.
+/// session.json is untouched throughout.
+#[test]
+fn b11_session_meta_defaults_round_trips_and_trims_title() {
+    let root = tempfile::tempdir().unwrap();
+    let w = SessionWriter::create(root.path(), started(), meta()).unwrap();
+    let dir = w.dir();
+    let before = fs::read(dir.join(SESSION_FILE)).unwrap();
+
+    // Missing: title null, memo empty.
+    assert_eq!(
+        read_meta(dir),
+        SessionMetaFile {
+            title: None,
+            memo: String::new()
+        }
+    );
+
+    // Writing replaces it via a temp file; none is left behind.
+    write_meta(dir, &SessionMetaFile::new(Some(" Lecture 3 "), "notes")).unwrap();
+    let read_back = read_meta(dir);
+    assert_eq!(read_back.title, Some("Lecture 3".to_string()));
+    assert_eq!(read_back.memo, "notes");
+    let names: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        !names.iter().any(|n| n.ends_with(".tmp")),
+        "no temp file left behind: {names:?}"
+    );
+
+    // A title that is only whitespace becomes null.
+    write_meta(dir, &SessionMetaFile::new(Some("   "), "notes")).unwrap();
+    assert_eq!(read_meta(dir).title, None);
+
+    // session.json never changed.
+    assert_eq!(fs::read(dir.join(SESSION_FILE)).unwrap(), before);
+}
+
+/// B12: trashing images removes their records and PNGs, rebuilds the PDF from what is
+/// left, and removes the PDF once nothing is left; an unknown index errors and changes
+/// nothing.
+#[test]
+fn b12_trash_captures_rebuilds_or_removes_the_pdf() {
+    let root = tempfile::tempdir().unwrap();
+    let trash_dir = root.path().join("trash");
+    let trash = DirTrash(trash_dir.clone());
+    let mut w = SessionWriter::create(&root.path().join("out"), started(), meta()).unwrap();
+    let mut paths = Vec::new();
+    for i in 1..=5u32 {
+        paths.push(
+            w.save_capture(
+                i as usize,
+                &pattern(10, 10, i),
+                10,
+                10,
+                i as f64,
+                i as f64 + 1.0,
+                CaptureReason::Settled,
+            )
+            .unwrap(),
+        );
+    }
+    w.finish(Local::now()).unwrap();
+    let dir = w.dir().to_path_buf();
+    let now = Local
+        .with_ymd_and_hms(2026, 10, 7, 12, 0, 0)
+        .single()
+        .unwrap();
+
+    // Trash 2 of 5: their PNGs move to the trash, 3 captures remain, the PDF is rebuilt.
+    let moved = trash_captures(&dir, &[2, 4], &trash, now).unwrap();
+    assert_eq!(moved, 2);
+    assert!(!paths[1].exists());
+    assert!(!paths[3].exists());
+    assert!(trash_dir.join(paths[1].file_name().unwrap()).exists());
+    assert!(trash_dir.join(paths[3].file_name().unwrap()).exists());
+
+    let s = read_session(&dir);
+    assert_eq!(s["captures"].as_array().unwrap().len(), 3);
+    assert_eq!(s["pdf"]["pages"], 3);
+    assert!(s["pdf"]["rebuilt_at"].is_string());
+    assert_schema_valid(&s);
+
+    // An unknown index among otherwise-valid ones errors, and nothing changes.
+    let before = fs::read(dir.join(SESSION_FILE)).unwrap();
+    assert!(trash_captures(&dir, &[1, 99], &trash, now).is_err());
+    assert_eq!(fs::read(dir.join(SESSION_FILE)).unwrap(), before);
+    assert_eq!(read_session(&dir)["captures"].as_array().unwrap().len(), 3);
+
+    // Trashing everything left removes the PDF.
+    let moved_rest = trash_captures(&dir, &[1, 3, 5], &trash, now).unwrap();
+    assert_eq!(moved_rest, 3);
+    assert!(!dir.join(PDF_FILE).exists());
+    let s2 = read_session(&dir);
+    assert!(s2["captures"].as_array().unwrap().is_empty());
+    assert!(s2["pdf"].is_null());
+    assert_schema_valid(&s2);
 }
 
 /// A session without captures writes no PDF.
