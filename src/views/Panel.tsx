@@ -3,13 +3,12 @@ import { FiSettings } from "react-icons/fi";
 import Button from "../components/Button";
 import IconButton from "../components/IconButton";
 import Notice from "../components/Notice";
+import WindowPicker from "../components/WindowPicker";
 import { useLang } from "../i18n";
 import {
-  beginRegion,
   closeWindow,
   fitPanel,
   getAppState,
-  listWindows,
   onAppState,
   openFolder,
   openPermissionSettings,
@@ -22,7 +21,7 @@ import {
   stopSession,
   undoLast,
 } from "../ipc";
-import type { AppState, WindowEntry } from "../ipc/types";
+import type { AppState } from "../ipc/types";
 import { formatElapsed } from "../lib/format";
 import { isMac } from "../lib/platform";
 import "./Panel.css";
@@ -38,11 +37,8 @@ export default function Panel() {
   const { t } = useLang();
   const [appState, setAppState] = useState<AppState | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [windows, setWindows] = useState<WindowEntry[] | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildStatus, setRebuildStatus] = useState<RebuildStatus | null>(null);
-  const listboxRef = useRef<HTMLUListElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -85,38 +81,10 @@ export default function Panel() {
   }, []);
 
   useEffect(() => {
-    if (pickerOpen && windows && windows.length > 0) listboxRef.current?.focus();
-  }, [pickerOpen, windows]);
-
-  useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (pickerOpen) {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          setPickerOpen(false);
-          return;
-        }
-        if (!windows || windows.length === 0) return;
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          setSelectedIndex((i) => Math.min(i + 1, windows.length - 1));
-          return;
-        }
-        if (e.key === "ArrowUp") {
-          e.preventDefault();
-          setSelectedIndex((i) => Math.max(i - 1, 0));
-          return;
-        }
-        if (e.key === "Enter") {
-          e.preventDefault();
-          const w = windows[selectedIndex];
-          if (w) {
-            setPickerOpen(false);
-            void beginRegion(w.id);
-          }
-        }
-        return;
-      }
+      // While the picker is open, WindowPicker owns Escape/Arrow/Enter itself (it calls
+      // onCancel/onPicked, which this component wires back to setPickerOpen(false)).
+      if (pickerOpen) return;
       if (e.key === "Escape") {
         e.preventDefault();
         void closeWindow();
@@ -129,13 +97,10 @@ export default function Panel() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [pickerOpen, windows, selectedIndex]);
+  }, [pickerOpen]);
 
   function handleOpenPicker() {
     setPickerOpen(true);
-    setWindows(null);
-    setSelectedIndex(0);
-    listWindows().then(setWindows);
   }
 
   async function handleRequestPermission() {
@@ -229,54 +194,7 @@ export default function Panel() {
     if (pickerOpen) {
       return (
         <div className="panel-section">
-          <h2 id="picker-heading" className="panel-picker-heading">
-            {t("picker.heading")}
-          </h2>
-          {windows === null ? (
-            <p className="panel-picker-status">{t("picker.loading")}</p>
-          ) : windows.length === 0 ? (
-            <p className="panel-picker-status">{t("picker.empty")}</p>
-          ) : (
-            <ul
-              ref={listboxRef}
-              role="listbox"
-              aria-labelledby="picker-heading"
-              aria-activedescendant={`picker-option-${selectedIndex}`}
-              tabIndex={0}
-              className="panel-picker-list"
-            >
-              {windows.map((w, i) => (
-                // Keyboard interaction for this listbox is handled once, globally, by the
-                // keydown handler above (Arrow keys + Enter) using aria-activedescendant --
-                // the standard ARIA listbox pattern, where individual options are not
-                // themselves tab-stops. The click handler below is the mouse-only
-                // equivalent of that same Enter action, so it needs no keyboard listener
-                // of its own.
-                // eslint-disable-next-line jsx-a11y/click-events-have-key-events
-                <li
-                  key={w.id}
-                  id={`picker-option-${i}`}
-                  role="option"
-                  aria-selected={i === selectedIndex}
-                  className={i === selectedIndex ? "panel-picker-option is-selected" : "panel-picker-option"}
-                  onPointerEnter={() => setSelectedIndex(i)}
-                  onClick={() => {
-                    setPickerOpen(false);
-                    void beginRegion(w.id);
-                  }}
-                >
-                  <img src={w.thumb} alt="" className="panel-picker-thumb" />
-                  <span className="panel-picker-meta">
-                    <span className="panel-picker-app">{w.app}</span>
-                    <span className="panel-picker-window-title">{w.title}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <Button kind="secondary" onClick={() => setPickerOpen(false)}>
-            {t("action.back")}
-          </Button>
+          <WindowPicker onPicked={() => setPickerOpen(false)} onCancel={() => setPickerOpen(false)} />
         </div>
       );
     }
