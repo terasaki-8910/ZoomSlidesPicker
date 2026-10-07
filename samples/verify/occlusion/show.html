@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ZSP-OCCL</title>
+<style>html,body{margin:0;background:#000;height:100%}img{display:block;width:100%;height:100%;object-fit:contain}</style>
+<img id="f" alt="">
+<script>
+// The F1 fixture as 2 fps JPEG frames (frames/0001.jpg ...), shown by wall-clock time so
+// throttled timers still land on the right frame. The title carries the run id (?id=).
+document.title = "ZSP-OCCL-" + (new URLSearchParams(location.search).get("id") || "x");
+const N = Number(new URLSearchParams(location.search).get("n") || 176);
+const img = document.getElementById("f"), cache = [];
+for (let i = 1; i <= N; i++) { const im = new Image(); im.src = `frames/${String(i).padStart(4, "0")}.jpg`; cache.push(im); }
+Promise.all(cache.map((im) => im.decode().catch(() => {}))).then(() => {
+  const start = Date.now();
+  const tick = () => {
+    const i = Math.min(N - 1, Math.floor((Date.now() - start) / 500));
+    if (img.src !== cache[i].src) img.src = cache[i].src;
+    if (i < N - 1) setTimeout(tick, 100);
+  };
+  tick();
+});
+</script>
