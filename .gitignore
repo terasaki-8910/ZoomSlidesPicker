@@ -30,3 +30,6 @@ samples/proto/report_r2.json
 
 # per-feature worktrees used for parallel builds
 .worktrees/
+
+# a second Cargo target dir, for release builds while target/ is in use
+target-dmg/
