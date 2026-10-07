@@ -70,17 +70,20 @@ fn on_notice<R: Runtime>(app: &AppHandle<R>, notice: &Notice, status: &Status) {
             i18n::title_panel(),
             i18n::notify_window_lost_body(lang),
         ),
-        Notice::Finished { count, .. } => show(
-            app,
-            i18n::title_panel(),
-            &i18n::notify_stop_body(lang, *count),
-        ),
-        Notice::Saved { .. }
-        | Notice::Replaced { .. }
-        | Notice::Undone { .. }
-        | Notice::Paused
-        | Notice::Resumed
-        | Notice::WindowBack => {}
+        Notice::Finished { count, .. } => {
+            show(
+                app,
+                i18n::title_panel(),
+                &i18n::notify_stop_body(lang, *count),
+            );
+            crate::library::notify_changed(app);
+        }
+        // A capture was saved, replaced, or undone: the library window's count and
+        // thumbnails may be stale (docs/impl/library.md > Events).
+        Notice::Saved { .. } | Notice::Replaced { .. } | Notice::Undone { .. } => {
+            crate::library::notify_changed(app);
+        }
+        Notice::Paused | Notice::Resumed | Notice::WindowBack => {}
     }
     ui::sync(app);
 }

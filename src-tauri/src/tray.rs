@@ -118,6 +118,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
 fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
     match id {
+        "library" => crate::library::open_window(app),
         "start" => windows::open_panel(app),
         "stop" => crate::session_ctl::stop(app),
         "open_folder" => crate::session_ctl::open_folder(app),
@@ -184,6 +185,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, m: MenuModel) -> tauri::Result<Men
     let item = |id: &str, text: &str, enabled: bool| {
         MenuItem::with_id(app, id, text, enabled, None::<&str>)
     };
+    let library = item("library", i18n::tray_history(m.lang), true)?;
     let start = item("start", i18n::tray_start(m.lang), !m.has_session)?;
     let stop = item("stop", i18n::tray_stop(m.lang), m.has_session)?;
     let open_folder = item(
@@ -203,6 +205,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, m: MenuModel) -> tauri::Result<Men
     Menu::with_items(
         app,
         &[
+            &library,
             &start,
             &stop,
             &open_folder,
