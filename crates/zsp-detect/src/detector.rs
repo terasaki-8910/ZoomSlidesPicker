@@ -6,11 +6,14 @@
 //! samples, and compares it again as soon as it stops. A speaker's camera tile in a recorded
 //! lecture changes a few cells every few seconds, never often enough to be masked, so each
 //! of those changes looked like a new slide. Here a sample whose changes are few
-//! (`live_event_share`) and fit in a small box (`live_tile_share`) touches that box; a cell
+//! (`live_event_share`), but not tiny (`live_min_cells`: a pointer or a cursor), and fit
+//! in a small box (`live_tile_share`) touches that box; a cell
 //! touched for the `live_events`-th time within `live_events_within_s` (touches closer than
 //! `event_gap_s` count once) is a live picture: it stays out of every comparison while it
 //! keeps changing at least once per `live_window_s`. A slide change (`slide_change_share`)
-//! clears the touches of cells that are not live yet. A build or a
+//! clears the touches of cells that are not live yet, and ends the live pictures it changed
+//! that are younger than `live_settled_s` (a pointer that dwelt on the old slide's text),
+//! keeping the older ones (a camera tile). A build or a
 //! slide change changes a cell once, and a playing video changes it every sample, so neither
 //! is one: the look after a video stops is still saved (R1-5 b), once it has stayed for
 //! `motion_quiet_s` or the slide changes.
@@ -64,7 +67,8 @@ pub struct Config {
     /// this often.
     pub live_window_s: f64,
     /// A pending state that differs from the last save only where something moved within
-    /// `live_window_s` is saved at the final quiet only once it is this old.
+    /// `live_window_s`, or a small box changed within this long, is saved at the final
+    /// quiet only once it is this old (a camera tile may turn live meanwhile).
     pub motion_quiet_s: f64,
     /// Motion is remembered (for the wait above) only while the moving cells are at most
     /// this share of the grid: a long transition or a scroll moves everything.
@@ -78,9 +82,14 @@ pub struct Config {
     pub live_events_within_s: f64,
     pub live_event_share: f64,
     pub live_tile_share: f64,
+    /// Samples with fewer changed cells than this (a laser pointer, a mouse cursor) touch
+    /// nothing: a pointer going back and forth over text must not make the text live.
+    pub live_min_cells: usize,
     /// A sample where more than this share of the grid changed (a slide change) clears the
     /// change history of cells that are not live.
     pub slide_change_share: f64,
+    /// Live pictures at least this old survive a slide change that changes them.
+    pub live_settled_s: f64,
     /// Grow live pictures by this many cells (their changes are sparse within the tile).
     pub live_pad: usize,
 }
@@ -109,7 +118,9 @@ impl Default for Config {
             live_events_within_s: 10.0,
             live_event_share: 0.015,
             live_tile_share: 0.06,
+            live_min_cells: 15,
             slide_change_share: 0.05,
+            live_settled_s: 60.0,
             live_pad: 1,
         }
     }
@@ -301,7 +312,12 @@ fn std_dev(data: &[u8]) -> f64 {
 struct Masks {
     /// Not moving and not live: compared.
     keep: Vec<bool>,
-    /// `keep`, minus cells that moved within `live_window_s` (still, and long enough).
+    /// `keep`, minus cells one touch away from turning live (touched twice within
+    /// `live_events_within_s`): used to tell a new state from the pending one and from the
+    /// saved ones, so a camera tile that is not live yet does not save the slide again.
+    keep_firm: Vec<bool>,
+    /// `keep`, minus cells that moved within `live_window_s` or were touched within
+    /// `motion_quiet_s` (maybe a live picture that is not one yet).
     keep_still: Vec<bool>,
 }
 
@@ -343,6 +359,8 @@ pub struct Detector {
     last_moving_t: Vec<f64>,
     /// Per cell: a live picture until this time (`NEG_INFINITY` if not).
     live_until: Vec<f64>,
+    /// Per cell: since when it has been a live picture (meaningful while it is one).
+    live_since: Vec<f64>,
     /// Per cell: the last time a sample touched it.
     last_touch_t: Vec<f64>,
     /// Per cell: when its latest two counted touches happened (latest first).
@@ -366,6 +384,7 @@ impl Detector {
             blank_reported: false,
             last_moving_t: Vec::new(),
             live_until: Vec::new(),
+            live_since: Vec::new(),
             last_touch_t: Vec::new(),
             event_t: Vec::new(),
             last_keep: None,
@@ -479,6 +498,7 @@ impl Detector {
         if self.last_moving_t.len() != len {
             self.last_moving_t = vec![f64::NEG_INFINITY; len];
             self.live_until = vec![f64::NEG_INFINITY; len];
+            self.live_since = vec![f64::NEG_INFINITY; len];
             self.last_touch_t = vec![f64::NEG_INFINITY; len];
             self.event_t = vec![[f64::NEG_INFINITY; 2]; len];
         }
@@ -500,10 +520,15 @@ impl Detector {
         let changed_count = changed.iter().filter(|&&c| c).count();
         let changed_share = changed_count as f64 / len as f64;
         if changed_share > cfg.slide_change_share {
-            // A slide change: earlier touches belonged to the old slide.
-            for (ev, &until) in self.event_t.iter_mut().zip(&self.live_until) {
-                if t > until {
-                    *ev = [f64::NEG_INFINITY; 2];
+            // A slide change: earlier touches belonged to the old slide, and so did young
+            // live pictures it replaced (a pointer dwelling on text).
+            for (c, &ch) in changed.iter().enumerate() {
+                let live = t <= self.live_until[c];
+                if live && ch && t - self.live_since[c] < cfg.live_settled_s {
+                    self.live_until[c] = f64::NEG_INFINITY;
+                    self.event_t[c] = [f64::NEG_INFINITY; 2];
+                } else if !live {
+                    self.event_t[c] = [f64::NEG_INFINITY; 2];
                 }
             }
         }
@@ -515,7 +540,7 @@ impl Detector {
         }
         // Few changes in a small box: a picture tile changing (or a build, which touches
         // its box only once). Count a touch for every cell of the box.
-        if changed_count > 0 && changed_share <= cfg.live_event_share {
+        if changed_count >= cfg.live_min_cells && changed_share <= cfg.live_event_share {
             let (w, h) = (cur.width, cur.height);
             let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
             for (i, _) in changed.iter().enumerate().filter(|&(_, &ch)| ch) {
@@ -532,6 +557,9 @@ impl Detector {
                             let [latest, before] = self.event_t[c];
                             let first_of_run = if cfg.live_events <= 2 { latest } else { before };
                             if t - first_of_run <= cfg.live_events_within_s {
+                                if t > self.live_until[c] {
+                                    self.live_since[c] = t;
+                                }
                                 self.live_until[c] = self.live_until[c].max(t + cfg.live_window_s);
                             }
                             self.event_t[c] = [t, latest];
@@ -547,8 +575,17 @@ impl Detector {
         let excluded: Vec<bool> = (0..len).map(|c| moving_raw[c] || live[c]).collect();
         let excluded = dilate(&excluded, cur.width, cur.height, cfg.mask_pad);
         let keep: Vec<bool> = excluded.iter().map(|&e| !e).collect();
-        let keep_still = keep.iter().zip(&recent).map(|(&k, &r)| k && !r).collect();
-        Masks { keep, keep_still }
+        let keep_firm = (0..len)
+            .map(|c| keep[c] && t - self.event_t[c][1] > cfg.live_events_within_s)
+            .collect();
+        let keep_still = (0..len)
+            .map(|c| keep[c] && !recent[c] && t - self.last_touch_t[c] > cfg.motion_quiet_s)
+            .collect();
+        Masks {
+            keep,
+            keep_firm,
+            keep_still,
+        }
     }
 
     /// Process one sample (`Detector.step` in the reference).
@@ -586,6 +623,7 @@ impl Detector {
         let moving = dilate(&moving_raw, grid.width, grid.height, cfg.mask_pad);
         let masks = self.update_motion(t, grid, &diff_mask, &moving_raw, &moving);
         let keep = &masks.keep;
+        let firm = &masks.keep_firm;
 
         if changed_frac(&grid.data, &prev_data, keep, cfg.cell_thresh) > cfg.change_thresh {
             self.last_change_t = t;
@@ -628,7 +666,7 @@ impl Detector {
                     let differs = match &self.last_saved {
                         None => true,
                         Some(ls) => {
-                            changed_frac(&grid.data, &ls.data, keep, cfg.cell_thresh)
+                            changed_frac(&grid.data, &ls.data, firm, cfg.cell_thresh)
                                 > cfg.change_thresh
                         }
                     };
@@ -637,7 +675,7 @@ impl Detector {
                     }
                 }
                 Some(mut p) => {
-                    let differs = changed_frac(&grid.data, &p.grid.data, keep, cfg.cell_thresh)
+                    let differs = changed_frac(&grid.data, &p.grid.data, firm, cfg.cell_thresh)
                         > cfg.change_thresh;
                     if differs {
                         let sharpened = sharp >= p.held_sharp * cfg.refine_ratio
@@ -652,11 +690,11 @@ impl Detector {
                         } else if removed_frac(&p.grid.data, &grid.data, keep, cfg.cell_thresh)
                             >= cfg.removed_thresh
                         {
-                            self.commit(p, t, keep, SaveReason::Settled, &mut events);
+                            self.commit(p, t, firm, SaveReason::Settled, &mut events);
                             let differs2 = match &self.last_saved {
                                 None => true,
                                 Some(ls) => {
-                                    changed_frac(&grid.data, &ls.data, keep, cfg.cell_thresh)
+                                    changed_frac(&grid.data, &ls.data, firm, cfg.cell_thresh)
                                         > cfg.change_thresh
                                 }
                             };
@@ -689,12 +727,12 @@ impl Detector {
             });
             if !motion_only || t - p.t >= cfg.motion_quiet_s {
                 let p = self.pending.take().unwrap();
-                self.commit(p, t, keep, SaveReason::Settled, &mut events);
+                self.commit(p, t, firm, SaveReason::Settled, &mut events);
             }
         }
 
         self.prev = Some(grid.clone());
-        self.last_keep = Some(masks.keep);
+        self.last_keep = Some(masks.keep_firm);
         events
     }
 
