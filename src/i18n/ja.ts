@@ -60,7 +60,7 @@ export const ja = {
 
   // Library (history) window -- docs/impl/library.md > Strings, copied verbatim, plus
   // library.slideCount (see en.ts for why it is not in that table).
-  "library.search": "題名・日付・アプリで検索",
+  "library.search": "題名・日付・アプリ・メモで検索",
   "library.meta": "{date} · {duration} · {count} 枚",
   "library.recording": "記録中",
   "library.noPdf": "PDF なし",

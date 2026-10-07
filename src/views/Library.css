@@ -142,7 +142,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-bg-elevated);
-  object-fit: cover;
+  /* The whole capture, letterboxed: regions have any aspect ratio. */
+  object-fit: contain;
 }
 
 .library-row-main {
@@ -350,7 +351,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-bg-elevated);
-  object-fit: cover;
+  /* The whole capture, letterboxed: regions have any aspect ratio. */
+  object-fit: contain;
 }
 
 .library-tile-caption {
@@ -358,28 +360,27 @@
   font-size: var(--font-size-xs);
 }
 
-/* A solid backing chip for the checkbox (docs/impl/library.md > select mode): a
-   capture's own thumbnail content can sit anywhere, including this corner, so the
-   checkbox needs an opaque surface under it to stay legible regardless -- reuses the
-   existing overlay-dim token (the region selector's own darkening colour) rather than
-   a new one. */
-.library-tile-check-wrap {
-  position: absolute;
-  top: var(--space-xs);
-  left: var(--space-xs);
-  z-index: 1;
+.library-tile-selectable {
+  cursor: pointer;
+}
+
+.library-tile-caption-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--radius-sm);
-  background: var(--overlay-dim);
+  gap: var(--space-xs);
 }
 
 .library-tile-check {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+/* A chosen image is outlined in the accent colour, so the choice shows on the image too. */
+.library-tile-selectable:has(.library-tile-check:checked) .library-tile-img {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .library-empty-state {

@@ -581,22 +581,19 @@ export default function Library() {
               <span className="library-tile-caption tabular-nums">{caption}</span>
             );
             return selectMode ? (
-              <label key={c.index} className="library-tile">
-                {/* A solid chip behind the checkbox, not just the bare input: a real
-                    capture's own content can sit anywhere, including this corner (as
-                    this mock's own "Slide N" title did -- caught by looking at the
-                    screenshot, not by any test), so the checkbox needs its own opaque
-                    backing to stay legible regardless of what is under it. */}
-                <span className="library-tile-check-wrap">
+              // The checkbox sits in the caption row, never over the image: a capture's
+              // top-left corner is usually its slide title.
+              <label key={c.index} className="library-tile library-tile-selectable">
+                {img}
+                <span className="library-tile-caption-row">
                   <input
                     type="checkbox"
                     className="library-tile-check"
                     checked={selectedCaptures.has(c.index)}
                     onChange={() => toggleCapture(c.index)}
                   />
+                  {captionEl}
                 </span>
-                {img}
-                {captionEl}
               </label>
             ) : (
               <button key={c.index} type="button" className="library-tile library-tile-button" onClick={() => void openCapture(c.path)}>

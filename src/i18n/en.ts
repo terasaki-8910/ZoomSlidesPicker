@@ -64,7 +64,7 @@ export const en: Record<keyof typeof ja, string> = {
 
   // Library (history) window -- docs/impl/library.md > Strings, copied verbatim, plus
   // library.slideCount (see ja.ts for why it is not in that table).
-  "library.search": "Search by title, date, or app",
+  "library.search": "Search by title, date, app, or memo",
   "library.meta": "{date} · {duration} · {count} slides",
   "library.recording": "Recording",
   "library.noPdf": "No PDF",

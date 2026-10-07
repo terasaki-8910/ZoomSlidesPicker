@@ -79,7 +79,7 @@ describe("Library", () => {
     it("filters by custom title", async () => {
       setup(threeSessions());
       render(<Library />);
-      const search = await screen.findByPlaceholderText("題名・日付・アプリで検索");
+      const search = await screen.findByPlaceholderText("題名・日付・アプリ・メモで検索");
       fireEvent.change(search, { target: { value: "第1回" } });
 
       expect(await screen.findByRole("option", { name: /第1回授業/ })).toBeInTheDocument();
@@ -90,7 +90,7 @@ describe("Library", () => {
     it("filters by source title", async () => {
       setup(threeSessions());
       render(<Library />);
-      const search = await screen.findByPlaceholderText("題名・日付・アプリで検索");
+      const search = await screen.findByPlaceholderText("題名・日付・アプリ・メモで検索");
       fireEvent.change(search, { target: { value: "video" } });
 
       expect(await screen.findByRole("option", { name: /第1回授業/ })).toBeInTheDocument();
@@ -100,7 +100,7 @@ describe("Library", () => {
     it("filters by source app, case-insensitively", async () => {
       setup(threeSessions());
       render(<Library />);
-      const search = await screen.findByPlaceholderText("題名・日付・アプリで検索");
+      const search = await screen.findByPlaceholderText("題名・日付・アプリ・メモで検索");
       fireEvent.change(search, { target: { value: "ZOOM.US" } });
 
       expect(await screen.findByRole("option", { name: /Zoom ミーティング/ })).toBeInTheDocument();
@@ -110,7 +110,7 @@ describe("Library", () => {
     it("filters by memo", async () => {
       setup(threeSessions());
       render(<Library />);
-      const search = await screen.findByPlaceholderText("題名・日付・アプリで検索");
+      const search = await screen.findByPlaceholderText("題名・日付・アプリ・メモで検索");
       fireEvent.change(search, { target: { value: "宿題" } });
 
       expect(await screen.findByRole("option", { name: /Zoom ミーティング/ })).toBeInTheDocument();
@@ -120,7 +120,7 @@ describe("Library", () => {
     it("filters by date in each of the three search forms (M/D, M月D日, YYYY-MM-DD)", async () => {
       setup(threeSessions());
       render(<Library />);
-      const search = await screen.findByPlaceholderText("題名・日付・アプリで検索");
+      const search = await screen.findByPlaceholderText("題名・日付・アプリ・メモで検索");
 
       fireEvent.change(search, { target: { value: "10/7" } });
       expect(await screen.findByRole("option", { name: /第1回授業/ })).toBeInTheDocument();
@@ -138,7 +138,7 @@ describe("Library", () => {
     it("matches only when every space-separated term matches (AND)", async () => {
       setup(threeSessions());
       render(<Library />);
-      const search = await screen.findByPlaceholderText("題名・日付・アプリで検索");
+      const search = await screen.findByPlaceholderText("題名・日付・アプリ・メモで検索");
 
       fireEvent.change(search, { target: { value: "zoom 10/3" } });
       expect(await screen.findByRole("option", { name: /Zoom ミーティング/ })).toBeInTheDocument();
@@ -152,7 +152,7 @@ describe("Library", () => {
     it("shows a no-hits message when nothing matches, and an empty-library message with no sessions at all", async () => {
       setup(threeSessions());
       render(<Library />);
-      const search = await screen.findByPlaceholderText("題名・日付・アプリで検索");
+      const search = await screen.findByPlaceholderText("題名・日付・アプリ・メモで検索");
       fireEvent.change(search, { target: { value: "nonexistent" } });
       expect(await screen.findByText("見つかりませんでした。")).toBeInTheDocument();
 
