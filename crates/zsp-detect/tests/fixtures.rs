@@ -1,4 +1,4 @@
-//! ACCEPTANCE A1-A10 and A15: the detector on the committed fixtures F1-F9.
+//! ACCEPTANCE A1-A10, A15 and A16: the detector on the committed fixtures F1-F10.
 
 mod common;
 
@@ -7,16 +7,22 @@ use common::{expected, load_strip, run_strip};
 fn check_fixture(id: &str) {
     let exp = expected(id);
     let run = run_strip(&load_strip(id));
-    let got: Vec<f64> = run.saves.iter().map(|s| s.t_content).collect();
+    let captures = run.captures();
+    let got: Vec<f64> = captures.iter().map(|s| s.t_content).collect();
 
     assert_eq!(
-        run.saves.len(),
+        captures.len(),
         exp.saves.len(),
-        "{id}: number of saves, got content times {got:?}"
+        "{id}: number of captures, got content times {got:?}"
+    );
+    assert_eq!(
+        run.replaces.len(),
+        exp.replaces,
+        "{id}: replacements, got {:?}",
+        run.replaces
     );
     for (label, from, to) in &exp.saves {
-        let hits = run
-            .saves
+        let hits = captures
             .iter()
             .filter(|s| *from <= s.t_content && s.t_content <= *to)
             .count();
@@ -25,8 +31,15 @@ fn check_fixture(id: &str) {
             "{id}: one save for {label} in [{from}, {to}], got content times {got:?}"
         );
     }
+    // No save or replacement lands in a quiet stretch.
+    let all: Vec<f64> = run
+        .saves
+        .iter()
+        .chain(&run.replaces)
+        .map(|s| s.t_content)
+        .collect();
     for (label, from, to) in &exp.quiet {
-        let inside: Vec<f64> = got
+        let inside: Vec<f64> = all
             .iter()
             .copied()
             .filter(|t| *from <= *t && *t < *to)
@@ -49,7 +62,7 @@ fn check_fixture(id: &str) {
         run.blanks
     );
     if let Some(sharp_from) = &exp.sharp_from {
-        for (s, from) in run.saves.iter().zip(sharp_from) {
+        for (s, from) in captures.iter().zip(sharp_from) {
             assert!(
                 s.held_t >= *from,
                 "{id}: save at content {} must use a frame from >= {from}, got held {}",
@@ -58,7 +71,7 @@ fn check_fixture(id: &str) {
             );
         }
     }
-    for (i, s) in run.saves.iter().enumerate() {
+    for (i, s) in captures.iter().enumerate() {
         assert_eq!(s.index, i + 1, "{id}: indices are 1-based and dense");
     }
 }
@@ -83,6 +96,14 @@ fn a15_f8_laser_then_build() {
 #[test]
 fn a15_f9_small_camera_and_player_controls() {
     check_fixture("F9");
+}
+
+/// A16 (R3-2): bullets added 20 s apart: the saved image is replaced by each new step
+/// (two replacements, one capture), and returns to the slide or its first step are
+/// revisits.
+#[test]
+fn a16_f10_spaced_build_replaces() {
+    check_fixture("F10");
 }
 
 /// A1-A3: lecture at normal speed (7 saves, none while the video plays, one revisit).

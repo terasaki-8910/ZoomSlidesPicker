@@ -74,6 +74,8 @@ def export_strips(only=None):
             "blanks": spec["blanks"],
             "quiet": [{"label": lb, "from": a, "to": b} for lb, a, b in spec["quiet"]],
         }
+        if spec.get("replaces"):
+            expected[fid]["replaces"] = spec["replaces"]
         if "sharp_from" in spec:
             expected[fid]["sharp_from"] = spec["sharp_from"]
         print(f"{fid}: {len(times)} samples, grid {gw}x{gh}")

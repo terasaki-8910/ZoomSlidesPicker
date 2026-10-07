@@ -1,5 +1,6 @@
 //! ACCEPTANCE B8: the mp4 mode on fixtures/f1_2fps.mp4 gives the F1 results
-//! (content times within 0.5 s of the F1 windows). Skipped when ffmpeg is not on PATH.
+//! (the captures at the end, content times within 0.5 s of the F1 windows; replacements and
+//! revisits as in F1). Skipped when ffmpeg is not on PATH.
 
 use std::path::Path;
 
@@ -17,8 +18,9 @@ fn b8_mp4_mode_matches_f1() {
     assert_eq!(frames.size(), (1280, 720));
 
     let mut det = Detector::new(Config::default());
-    let mut saves = Vec::new();
-    let mut revisits = 0;
+    // Capture index -> content time of its current version (a Replace overwrites it).
+    let mut captures = std::collections::BTreeMap::new();
+    let (mut replaces, mut revisits) = (0, 0);
     let mut last_t = 0.0;
     let mut n = 0;
     for item in frames.by_ref() {
@@ -27,7 +29,17 @@ fn b8_mp4_mode_matches_f1() {
         let (g, d) = analyze(img.as_raw(), img.width(), img.height());
         for ev in det.step(t, &g, &d) {
             match ev {
-                Event::Save { t_content, .. } => saves.push(t_content),
+                Event::Save {
+                    index, t_content, ..
+                } => {
+                    captures.insert(index, t_content);
+                }
+                Event::Replace {
+                    index, t_content, ..
+                } => {
+                    captures.insert(index, t_content);
+                    replaces += 1;
+                }
                 Event::Revisit { .. } => revisits += 1,
                 _ => {}
             }
@@ -36,10 +48,17 @@ fn b8_mp4_mode_matches_f1() {
         n += 1;
     }
     for ev in det.finish(last_t) {
-        if let Event::Save { t_content, .. } = ev {
-            saves.push(t_content);
+        if let Event::Save {
+            index, t_content, ..
+        }
+        | Event::Replace {
+            index, t_content, ..
+        } = ev
+        {
+            captures.insert(index, t_content);
         }
     }
+    let saves: Vec<f64> = captures.into_values().collect();
     assert_eq!(n, 176, "decoded frames");
 
     let expected: serde_json::Value =
@@ -62,5 +81,9 @@ fn b8_mp4_mode_matches_f1() {
     assert_eq!(
         revisits,
         expected["F1"]["revisits"].as_u64().unwrap() as usize
+    );
+    assert_eq!(
+        replaces,
+        expected["F1"]["replaces"].as_u64().unwrap_or(0) as usize
     );
 }

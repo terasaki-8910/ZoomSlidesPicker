@@ -44,6 +44,8 @@ pub enum EventKind {
     WindowLost,
     WindowBack,
     Undo,
+    /// A capture was replaced by a version that only adds to it (`index` says which).
+    Replaced,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -93,6 +95,9 @@ pub struct EventRecord {
     pub t: f64,
     #[serde(rename = "type")]
     pub kind: EventKind,
+    /// The capture an event is about (`replaced` only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -291,8 +296,72 @@ impl SessionWriter {
     }
 
     pub fn add_event(&mut self, t: f64, kind: EventKind) -> io::Result<()> {
-        self.file.events.push(EventRecord { t, kind });
+        self.file.events.push(EventRecord {
+            t,
+            kind,
+            index: None,
+        });
         write_session_json(&self.dir, &self.file)
+    }
+
+    /// Replace capture `index` with a new version (R3-2): write the frame as
+    /// `capture_file_name(index, t_content)`, move the old PNG to `trash`, update the record
+    /// in place (same index and position), and add a `replaced` event at `t_saved`. The new
+    /// file is written before the old one is moved, unless both have the same name.
+    /// Returns the new PNG path.
+    #[allow(clippy::too_many_arguments)]
+    pub fn replace_capture(
+        &mut self,
+        index: usize,
+        rgba: &[u8],
+        width: u32,
+        height: u32,
+        t_content: f64,
+        t_saved: f64,
+        reason: CaptureReason,
+        trash: &dyn Trash,
+    ) -> io::Result<PathBuf> {
+        let pos = self
+            .file
+            .captures
+            .iter()
+            .position(|c| c.index == index)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::NotFound, format!("no capture {index}"))
+            })?;
+        let old_path = self.dir.join(&self.file.captures[pos].file);
+        let name = capture_file_name(index, t_content);
+        let path = self.dir.join(&name);
+        if path == old_path {
+            trash.trash(&old_path)?;
+        }
+        let rgb = rgba_to_rgb(rgba);
+        let image = RgbImage::from_raw(width, height, rgb).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "rgba buffer does not match width * height",
+            )
+        })?;
+        image.save(&path).map_err(io::Error::other)?;
+        if path != old_path {
+            trash.trash(&old_path)?;
+        }
+        self.file.captures[pos] = CaptureRecord {
+            index,
+            file: name,
+            t_content,
+            t_saved,
+            reason,
+            width,
+            height,
+        };
+        self.file.events.push(EventRecord {
+            t: t_saved,
+            kind: EventKind::Replaced,
+            index: Some(index),
+        });
+        write_session_json(&self.dir, &self.file)?;
+        Ok(path)
     }
 
     /// Move the most recent capture's PNG to `trash`, drop its record, and add an `undo`
@@ -308,6 +377,7 @@ impl SessionWriter {
         self.file.events.push(EventRecord {
             t,
             kind: EventKind::Undo,
+            index: None,
         });
         write_session_json(&self.dir, &self.file)?;
         Ok(Some(path))

@@ -32,6 +32,8 @@
 //!   pending state, replacing any frame held before.
 //! - [`Event::Save`] with reason `Settled` or `End`: write the held frame. A `Save` is always
 //!   reported before a `Hold` that replaces the held frame in the same step.
+//! - [`Event::Replace`]: write the held frame as the new version of capture `index` (same
+//!   ordering rule as `Save`). The capture keeps its index; its old file goes to the trash.
 //! - [`Detector::save_now`] returns a `Save` with reason `Manual`: write the current frame.
 //! - Indices are 1-based and dense: the next save gets `saved_count() + 1`, so after an undo
 //!   the undone index is reused.
@@ -177,6 +179,17 @@ pub enum Event {
     /// Save. `held_t` is the time of the sample whose frame is written (the last `Hold`
     /// for `Settled`/`End`; the current sample for `Manual`).
     Save {
+        index: usize,
+        t_content: f64,
+        t_save: f64,
+        held_t: f64,
+        reason: SaveReason,
+    },
+    /// The settled state only adds to saved state `index` (text or lines added, nothing
+    /// removed; R3-2): write the held frame as the new version of that capture, replacing
+    /// its file. `held_t` as for `Save`. Its earlier versions still count as that capture
+    /// for revisits.
+    Replace {
         index: usize,
         t_content: f64,
         t_save: f64,
@@ -477,6 +490,11 @@ pub struct Detector {
     last_saved: Option<Grid>,
     /// Saved states, oldest first; `history.len()` is the dense 1-based index of the next save.
     history: Vec<Grid>,
+    /// Earlier versions of replaced captures, with the capture's index: a return to one is
+    /// a revisit of that capture.
+    aliases: Vec<(usize, Grid)>,
+    /// The saved capture the baseline shows (1-based), or `None` when it is a rejected state.
+    last_saved_index: Option<usize>,
     /// States removed by `undo_last`: never saved again in this session.
     rejected: Vec<Grid>,
     /// The not-yet-committed state, if any.
@@ -504,6 +522,8 @@ pub struct Detector {
     touch_ref: Option<(f64, Vec<u8>)>,
     /// Cells compared in the latest step (not moving, not live); `finish` uses it.
     last_keep: Option<Vec<bool>>,
+    /// `keep_still` of the latest step; `finish` uses it.
+    last_keep_still: Option<Vec<bool>>,
 }
 
 impl Detector {
@@ -515,6 +535,8 @@ impl Detector {
             last_change_t: 0.0,
             last_saved: None,
             history: Vec::new(),
+            aliases: Vec::new(),
+            last_saved_index: None,
             rejected: Vec::new(),
             pending: None,
             uniform_since: None,
@@ -529,6 +551,7 @@ impl Detector {
             run_count: Vec::new(),
             touch_ref: None,
             last_keep: None,
+            last_keep_still: None,
         }
     }
 
@@ -537,37 +560,70 @@ impl Detector {
     }
 
     /// Commit `pending`: nothing if it equals the current baseline (only masked or live
-    /// cells differ), a `Save` if it matches no saved or rejected state, a `Revisit` if it
-    /// matches a saved one, or nothing if it matches a rejected one (it still becomes the
-    /// new comparison baseline). Reference: `Detector._commit`, plus the baseline check.
+    /// cells differ), a `Revisit` if it matches a saved capture (or an earlier version of
+    /// one), nothing if it matches a rejected one (it still becomes the new comparison
+    /// baseline), a `Replace` if it only adds to the saved capture the baseline shows
+    /// (`may_replace`: not when the novelty is only where something moved, R1-5 b), and a
+    /// `Save` otherwise. Reference: `Detector._commit`, plus the baseline check and
+    /// `Replace`.
     fn commit(
         &mut self,
         pending: Pending,
         t_save: f64,
         keep: &[bool],
         reason: SaveReason,
+        may_replace: bool,
         events: &mut Vec<Event>,
     ) {
         let thresh = self.cfg.cell_thresh;
         let change_thresh = self.cfg.change_thresh;
-        if let Some(base) = &self.last_saved
-            && changed_frac(&pending.grid.data, &base.data, keep, thresh) <= change_thresh
-        {
+        let same =
+            |g: &Grid| changed_frac(&pending.grid.data, &g.data, keep, thresh) <= change_thresh;
+        if self.last_saved.as_ref().is_some_and(same) {
             return;
         }
-        for (idx, hist) in self.history.iter().enumerate().rev() {
-            if changed_frac(&pending.grid.data, &hist.data, keep, thresh) <= change_thresh {
-                events.push(Event::Revisit {
-                    t_content: pending.t,
-                    matches: idx + 1,
-                });
-                self.last_saved = Some(hist.clone());
-                return;
+        let versions = self
+            .history
+            .iter()
+            .enumerate()
+            .rev()
+            .map(|(i, g)| (i + 1, g))
+            .chain(self.aliases.iter().rev().map(|(i, g)| (*i, g)));
+        let mut revisit = None;
+        for (index, g) in versions {
+            if same(g) {
+                revisit = Some((index, g.clone()));
+                break;
             }
         }
-        for rej in self.rejected.iter().rev() {
-            if changed_frac(&pending.grid.data, &rej.data, keep, thresh) <= change_thresh {
-                self.last_saved = Some(rej.clone());
+        if let Some((matches, g)) = revisit {
+            events.push(Event::Revisit {
+                t_content: pending.t,
+                matches,
+            });
+            self.last_saved = Some(g);
+            self.last_saved_index = Some(matches);
+            return;
+        }
+        if let Some(rej) = self.rejected.iter().rev().find(|g| same(g)) {
+            self.last_saved = Some(rej.clone());
+            self.last_saved_index = None;
+            return;
+        }
+        if may_replace && let (Some(index), Some(base)) = (self.last_saved_index, &self.last_saved)
+        {
+            let kinds = cell_change_kinds(base, &pending.grid, keep, thresh);
+            if kinds.removed < self.cfg.removed_thresh && kinds.added >= self.cfg.added_thresh {
+                events.push(Event::Replace {
+                    index,
+                    t_content: pending.t,
+                    t_save,
+                    held_t: pending.held_t,
+                    reason,
+                });
+                let old = std::mem::replace(&mut self.history[index - 1], pending.grid.clone());
+                self.aliases.push((index, old));
+                self.last_saved = Some(pending.grid);
                 return;
             }
         }
@@ -580,7 +636,17 @@ impl Detector {
             reason,
         });
         self.last_saved = Some(pending.grid.clone());
+        self.last_saved_index = Some(index);
         self.history.push(pending.grid);
+    }
+
+    /// Whether `grid` differs from the baseline only where something moved or was touched
+    /// recently (`keep_still` leaves those out): a video that stopped, or a camera tile.
+    fn motion_only(&self, grid: &Grid, keep_still: &[bool]) -> bool {
+        self.last_saved.as_ref().is_some_and(|base| {
+            changed_frac(&grid.data, &base.data, keep_still, self.cfg.cell_thresh)
+                <= self.cfg.change_thresh
+        })
     }
 
     /// Start a new pending state and report it as held. Reference: `Detector._start_pending`.
@@ -893,7 +959,8 @@ impl Detector {
                                 // A brief overlay or a slide flicked past: dropped.
                                 return self.end_step(grid, masks, events);
                             }
-                            self.commit(p, t, firm, SaveReason::Settled, &mut events);
+                            let may_replace = !self.motion_only(&p.grid, &masks.keep_still);
+                            self.commit(p, t, firm, SaveReason::Settled, may_replace, &mut events);
                             let differs2 = match &self.last_saved {
                                 None => true,
                                 Some(ls) => {
@@ -924,13 +991,10 @@ impl Detector {
         {
             // Differs from the baseline only where something moved recently: a video that
             // stopped, or a camera tile that paused and may move again. Wait longer.
-            let motion_only = self.last_saved.as_ref().is_some_and(|base| {
-                changed_frac(&p.grid.data, &base.data, &masks.keep_still, cfg.cell_thresh)
-                    <= cfg.change_thresh
-            });
+            let motion_only = self.motion_only(&p.grid, &masks.keep_still);
             if !motion_only || t - p.t >= cfg.motion_quiet_s {
                 let p = self.pending.take().unwrap();
-                self.commit(p, t, firm, SaveReason::Settled, &mut events);
+                self.commit(p, t, firm, SaveReason::Settled, !motion_only, &mut events);
             }
         }
 
@@ -941,6 +1005,7 @@ impl Detector {
     fn end_step(&mut self, grid: &Grid, masks: Masks, events: Vec<Event>) -> Vec<Event> {
         self.prev = Some(grid.clone());
         self.last_keep = Some(masks.keep_firm);
+        self.last_keep_still = Some(masks.keep_still);
         events
     }
 
@@ -949,11 +1014,11 @@ impl Detector {
     pub fn finish(&mut self, t: f64) -> Vec<Event> {
         let mut events = Vec::new();
         if let Some(p) = self.pending.take() {
-            let keep = self
-                .last_keep
-                .take()
-                .unwrap_or_else(|| vec![true; p.grid.data.len()]);
-            self.commit(p, t, &keep, SaveReason::End, &mut events);
+            let all = vec![true; p.grid.data.len()];
+            let keep = self.last_keep.take().unwrap_or_else(|| all.clone());
+            let keep_still = self.last_keep_still.take().unwrap_or(all);
+            let may_replace = !self.motion_only(&p.grid, &keep_still);
+            self.commit(p, t, &keep, SaveReason::End, may_replace, &mut events);
         }
         events
     }
@@ -972,6 +1037,7 @@ impl Detector {
         }
         let index = self.history.len() + 1;
         self.last_saved = Some(grid.clone());
+        self.last_saved_index = Some(index);
         self.history.push(grid.clone());
         Event::Save {
             index,
@@ -989,7 +1055,14 @@ impl Detector {
         let grid = self.history.pop()?;
         let index = self.history.len() + 1;
         self.rejected.push(grid);
+        // Earlier versions of the undone capture are rejected with it.
+        let (gone, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut self.aliases)
+            .into_iter()
+            .partition(|(i, _)| *i == index);
+        self.aliases = kept;
+        self.rejected.extend(gone.into_iter().map(|(_, g)| g));
         self.last_saved = self.history.last().cloned();
+        self.last_saved_index = self.history.last().map(|_| self.history.len());
         Some(index)
     }
 

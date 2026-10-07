@@ -69,6 +69,12 @@ pub enum Notice {
         index: usize,
         path: PathBuf,
     },
+    /// Capture `index` was replaced by a version that only adds to it; `path` is the new
+    /// file (the old one went to the trash).
+    Replaced {
+        index: usize,
+        path: PathBuf,
+    },
     /// A single-colour stretch reached 10 s (reported once per stretch).
     Blank,
     /// Paused by [`Control::Pause`] (a lost window reports [`Notice::WindowLost`] instead).
@@ -123,7 +129,8 @@ impl Session {
     /// A captured, cropped frame at session time `t` (seconds since the start).
     ///
     /// Running: analyze, step the detector, and apply its events in order. `Hold` keeps this
-    /// frame as the held frame; `Save` (settled or end) writes the held frame;
+    /// frame as the held frame; `Save` (settled or end) writes the held frame; `Replace`
+    /// writes it as the new version of an earlier capture (the old file goes to the trash);
     /// `Revisit` and `Blank` are recorded in session.json.
     /// Paused: the frame is ignored, except that the first frame after a lost window records
     /// `window_back` (once) and returns [`Notice::WindowBack`]; the session stays paused until
@@ -329,6 +336,30 @@ impl Session {
                         to_capture_reason(reason),
                     )?;
                     notices.push(Notice::Saved { index, path });
+                }
+                Event::Replace {
+                    index,
+                    t_content,
+                    t_save,
+                    reason,
+                    ..
+                } => {
+                    let held = self
+                        .held
+                        .take()
+                        .expect("a Replace is always preceded by a Hold for the held state");
+                    let (w, h) = held.dimensions();
+                    let path = self.writer.replace_capture(
+                        index,
+                        held.as_raw(),
+                        w,
+                        h,
+                        t_content,
+                        t_save,
+                        to_capture_reason(reason),
+                        self.trash.as_ref(),
+                    )?;
+                    notices.push(Notice::Replaced { index, path });
                 }
                 Event::Revisit { t_content, matches } => {
                     self.writer.add_revisit(t_content, matches)?;
