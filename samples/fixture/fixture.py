@@ -246,6 +246,66 @@ def render_f6(t):
     return _cached(("f6", n), lambda: _slide_dark("Slide D1 暗い背景", ["項目 1", "項目 2", "項目 3"][:n]))
 
 
+# F7: a recorded lecture with the speaker's camera in a round tile (found in real use,
+# 2026-10-07). The face changes a few cells every one to three seconds and sometimes stays
+# still for a long while; it is never still or moving long enough for the motion mask.
+# Slide A, slide B built in three steps, slide C with a laser pointer, back to A.
+F7_FACE_C = (1150, 600)
+F7_FACE_R = 80
+
+
+def _f7_pose_changes():
+    """(t, dx, dy, mouth) at each change of the speaker's pose, from a fixed seed."""
+    rng = np.random.default_rng(7)
+    gaps = [1.5, 2.0, 1.0, 2.5, 1.5, 3.0, 1.0, 2.0, 9.0, 1.5, 1.0, 2.5, 18.0, 1.0, 2.0, 1.5, 6.0,
+            1.0, 2.5, 1.5, 12.0, 2.0, 1.0, 3.0, 1.5, 7.0, 1.0, 2.0, 1.5, 2.5, 16.0, 1.0, 1.5, 2.0,
+            1.0, 3.0, 1.5, 2.0, 10.0, 1.5, 1.0, 2.0, 1.5, 2.5, 1.0, 20.0]
+    t, out = 0.0, [(0.0, 0, 0, 2)]
+    for g in gaps:
+        t += g
+        out.append((t, int(rng.integers(-6, 7)), int(rng.integers(-3, 4)), int(rng.integers(0, 7))))
+    return out
+
+
+F7_POSES = _f7_pose_changes()
+
+
+def _f7_face(t):
+    pose = max((p for p in F7_POSES if p[0] <= t), key=lambda p: p[0])
+    _, dx, dy, mouth = pose
+    size = 2 * F7_FACE_R
+    tile = Image.new("RGB", (size, size), (90, 110, 140))
+    d = ImageDraw.Draw(tile)
+    cx, cy = F7_FACE_R + dx, F7_FACE_R + 12 + dy
+    d.ellipse([cx - 70, cy + 45, cx + 70, cy + 130], fill=(200, 120, 140))      # shoulders
+    d.ellipse([cx - 38, cy - 58, cx + 38, cy + 20], fill=(40, 35, 30))         # hair
+    d.ellipse([cx - 33, cy - 42, cx + 33, cy + 46], fill=(225, 190, 165))      # face
+    for ex in (cx - 13, cx + 13):
+        d.ellipse([ex - 4, cy - 6, ex + 4, cy + 2], fill=(30, 30, 30))          # eyes
+    d.ellipse([cx - 10, cy + 22, cx + 10, cy + 24 + mouth], fill=(120, 40, 50))  # mouth
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).ellipse([0, 0, size - 1, size - 1], fill=255)
+    return tile, mask
+
+
+def render_f7(t):
+    if t < 40.0 or t >= 110.0:
+        img = _cached(("f7", "A"), lambda: _slide("Slide A 授業概要", ["授業名：デジタル人文学", "担当：例 太郎", "評価：レポート 100%"])[0])
+    elif t < 80.0:
+        n = sum(t >= s for s in (40.0, 43.0, 46.0))
+        img = _cached(("f7", "B", n), lambda: _slide("Slide B 研究の流れ", ["資料の収集", "構造化", "分析と公開"][:n])[0])
+    else:
+        img = _cached(("f7", "C"), lambda: _slide("Slide C 参考文献", ["文献 1", "文献 2"])[0])
+        if 85.0 <= t < 95.0:
+            d = ImageDraw.Draw(img)
+            x, y = _along(F5_LASER, (t - 85.0) / 10.0)
+            d.ellipse([x - 10, y - 10, x + 10, y + 10], fill=(255, 150, 150))
+            d.ellipse([x - 6, y - 6, x + 6, y + 6], fill=(255, 40, 40))
+    tile, mask = _f7_face(t)
+    img.paste(tile, (F7_FACE_C[0] - F7_FACE_R, F7_FACE_C[1] - F7_FACE_R), mask)
+    return img
+
+
 # ---------------------------------------------------------------------------
 # Registry and expectations for the chosen behaviour (DECISIONS.md, round 1):
 # moving regions masked while they move and compared again once still (R1-5 b),
@@ -326,5 +386,23 @@ FIXTURES = {
         "revisits": 0,
         "blanks": 0,
         "quiet": [],
+    },
+    "F7": {
+        "label": "講師のカメラが丸い窓で重なる録画（140 秒）",
+        "render": render_f7,
+        "end": 140.0,
+        "saves": [
+            ("スライド A", 0.5, 8.0),
+            ("スライド B（箇条書き 3 つの最終状態）", 46.0, 48.5),
+            ("スライド C", 80.0, 82.5),
+        ],
+        "revisits": 1,
+        "blanks": 0,
+        "quiet": [
+            ("A：カメラだけが動く間", 8.0, 40.0),
+            ("B：カメラだけが動く間", 48.5, 80.0),
+            ("C：カメラとレーザーの間", 82.5, 110.0),
+            ("A に戻った後", 110.0, 140.0),
+        ],
     },
 }
