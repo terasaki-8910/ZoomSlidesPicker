@@ -44,14 +44,14 @@ minimum 760 x 520, resizable. Body background `--color-bg`.
     - title: the custom name if set, else the source title (window title or video file
       name), one line with ellipsis, font-size-sm weight 600
     - meta line, font-size-xs, text-secondary, tabular-nums:
-      `10月7日（火）12:42 · 33 分 · 36 枚`
+      `10月7日（水）12:42 · 33 分 · 36 枚`
     - badges after the meta when they apply: `記録中` (accent text on a subtle background,
       for the running session), `PDF なし` (text-secondary)
   - Selected row: `--color-bg-elevated` background and an accent left border 3 px.
   - Keyboard: the list is a listbox; Up/Down move the selection, Home/End jump.
 - Right pane, fills the rest, its own scroll, padding space-xl:
   - Title (font-size-xl, weight 600) and an IconButton `名前を変更` next to it.
-  - Meta line: `Safari の「第1回授業スライド.mp4」 · 10月7日（火）12:42–13:15 · 36 枚 · PDF あり`
+  - Meta line: `Safari の「第1回授業スライド.mp4」 · 10月7日（水）12:42–13:15 · 36 枚 · PDF あり`
   - Action row (secondary buttons, wrap): `フォルダを開く`, `PDF を開く`,
     `PDF を作り直す`, `同じスライドをまとめる…`, `画像を選ぶ`; then, pushed right,
     a danger-styled secondary button `削除…`.
@@ -140,7 +140,7 @@ they are images, so they do not follow the theme.
 | library.noHits | 見つかりませんでした。 | No matches. |
 | library.caption | {index} · {time} | {index} · {time} |
 
-Dates: ja `10月7日（火）12:42`, en `Oct 7 (Tue) 12:42`; durations: ja `33 分` / `1 時間 30 分`,
+Dates: ja `10月7日（水）12:42`, en `Oct 7 (Tue) 12:42`; durations: ja `33 分` / `1 時間 30 分`,
 en `33 min` / `1 h 30 min`.
 
 ## Checks for the prototype
