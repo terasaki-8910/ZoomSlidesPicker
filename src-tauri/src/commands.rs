@@ -11,7 +11,9 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::ipc_types::{AppState, RegionSel, Settings, SettingsView, Snapshot, WindowEntry};
 use crate::state::{self, SharedShell};
-use crate::{capture_cmds, session_ctl, session_start, settings, shortcuts, ui, video, windows};
+use crate::{
+    capture_cmds, library, session_ctl, session_start, settings, shortcuts, ui, video, windows,
+};
 
 #[tauri::command]
 pub fn get_app_state(shell: State<'_, SharedShell>) -> AppState {
@@ -31,16 +33,28 @@ pub fn set_settings(
 ) -> Result<SettingsView, String> {
     let lang = crate::settings::effective_language(shell.lock().unwrap().settings.language);
     crate::settings::validate(&settings, lang)?;
-    crate::settings::save(&app, &settings)?;
 
-    let view = {
+    // `knownRoots` is Rust-only (docs/impl/library.md > Roots): kept as-is, with the old
+    // `saveRoot` appended when it changes.
+    let (view, root_changed) = {
         let mut guard = shell.lock().unwrap();
+        let root_changed = guard.settings.save_root != settings.save_root;
+        if root_changed {
+            let old_root = guard.settings.save_root.clone();
+            if !guard.known_roots.contains(&old_root) {
+                guard.known_roots.push(old_root);
+            }
+        }
         guard.settings = settings;
-        crate::settings::view(guard.settings.clone())
+        crate::settings::save(&app, &guard.settings, &guard.known_roots)?;
+        (crate::settings::view(guard.settings.clone()), root_changed)
     };
     shortcuts::apply(&app);
     ui::sync(&app);
     let _ = app.emit("settings", &view);
+    if root_changed {
+        library::notify_changed(&app);
+    }
     Ok(view)
 }
 

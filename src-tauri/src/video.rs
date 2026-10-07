@@ -130,6 +130,7 @@ pub fn extract_video<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
 
     ui::sync(app);
     notify::notify_started(app, lang);
+    crate::library::notify_changed(app);
     Ok(())
 }
 

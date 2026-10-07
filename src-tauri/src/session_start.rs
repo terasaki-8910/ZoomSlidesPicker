@@ -105,5 +105,6 @@ pub fn start<R: Runtime>(
     windows::close_region(app);
     ui::sync(app);
     notify::notify_started(app, lang);
+    crate::library::notify_changed(app);
     Ok(())
 }

@@ -1,5 +1,6 @@
 //! Window creation (docs/impl/ipc.md > Windows). Each window is created when opened and
-//! destroyed when closed -- there is no window at launch (SPEC.md > 画面と操作).
+//! destroyed when closed (SPEC.md > 画面と操作), except the library window, which also
+//! opens at launch (library.rs).
 
 use std::sync::{LazyLock, Mutex};
 use std::thread;
@@ -89,7 +90,8 @@ pub fn open_panel<R: Runtime>(app: &AppHandle<R>) {
 
     // Built hidden so the positioner can place it before it is ever shown (avoids a
     // flash at the window's default spawn position). The tray position is known only
-    // after a tray event; without one (opened by relaunching the app) it is centered.
+    // after a tray event; without one (e.g. the `ZSP_OPEN_WINDOW=panel` test hook) it is
+    // centered.
     if window
         .move_window_constrained(Position::TrayCenter)
         .is_err()

@@ -6,6 +6,7 @@ mod capture_cmds;
 mod commands;
 mod i18n;
 mod ipc_types;
+mod library;
 mod notify;
 mod session_ctl;
 mod session_start;
@@ -18,6 +19,7 @@ mod ui;
 mod video;
 mod windows;
 
+use std::env;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
@@ -27,36 +29,51 @@ use tauri::{AppHandle, Manager, RunEvent};
 use state::{SharedShell, Shell};
 
 pub fn run() {
-    let app = tauri::Builder::default()
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(shortcuts::handle)
-                .build(),
-        )
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_positioner::init())
-        .setup(|app| {
-            // No Dock icon: this is a resident, tray-only app (SPEC.md > 使い方の流れ).
-            #[cfg(target_os = "macos")]
-            app.handle()
-                .set_activation_policy(tauri::ActivationPolicy::Accessory)?;
+    let builder = library::register_protocol(
+        tauri::Builder::default()
+            .plugin(
+                tauri_plugin_global_shortcut::Builder::new()
+                    .with_handler(shortcuts::handle)
+                    .build(),
+            )
+            .plugin(tauri_plugin_notification::init())
+            .plugin(tauri_plugin_dialog::init())
+            .plugin(tauri_plugin_opener::init())
+            .plugin(tauri_plugin_positioner::init())
+            .setup(|app| {
+                // No Dock icon: this is a resident, tray-only app (SPEC.md > 使い方の流れ).
+                // The library window raises it to `Regular` while it is open (library.rs).
+                #[cfg(target_os = "macos")]
+                app.handle()
+                    .set_activation_policy(tauri::ActivationPolicy::Accessory)?;
 
-            let settings = settings::load(app.handle());
-            let app_version = app.package_info().version.to_string();
-            app.manage(Mutex::new(Shell::new(app_version, settings)) as SharedShell);
+                let (settings, known_roots) = settings::load(app.handle());
+                let app_version = app.package_info().version.to_string();
+                app.manage(
+                    Mutex::new(Shell::new(app_version, settings, known_roots)) as SharedShell
+                );
 
-            let handle = app.handle().clone();
-            tray::build(&handle)?;
-            shortcuts::apply(&handle);
-            ui::sync(&handle);
+                let handle = app.handle().clone();
+                tray::build(&handle)?;
+                shortcuts::apply(&handle);
+                ui::sync(&handle);
 
-            start_ticker(handle.clone());
-            autostart::spawn(handle);
+                start_ticker(handle.clone());
+                // The library window opens at launch (R3-8 a), unless a test hook is in
+                // play: ZSP_OPEN_WINDOW asks for a specific window, and
+                // ZSP_AUTOSTART_TITLE starts a session outright (docs/impl/shell.md >
+                // Test hook).
+                if env::var("ZSP_AUTOSTART_TITLE").is_err() && env::var("ZSP_OPEN_WINDOW").is_err()
+                {
+                    library::open_window(&handle);
+                }
+                autostart::spawn(handle);
 
-            Ok(())
-        })
+                Ok(())
+            }),
+    );
+
+    let app = builder
         .invoke_handler(tauri::generate_handler![
             commands::get_app_state,
             commands::get_settings,
@@ -81,6 +98,18 @@ pub fn run() {
             commands::open_settings,
             commands::close_window,
             commands::fit_panel,
+            library::open_library,
+            library::list_sessions,
+            library::get_session,
+            library::open_session_folder,
+            library::open_session_pdf,
+            library::rebuild_session_pdf,
+            library::rename_session,
+            library::set_session_memo,
+            library::trash_session,
+            library::trash_captures,
+            library::fold_session,
+            library::open_capture,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the tauri application");
@@ -111,9 +140,10 @@ pub fn run() {
             }
         }
         // macOS: the app was opened again (Finder, Spotlight, `open`) while running. Open
-        // the panel, since the menu bar may have no room left to show the tray icon.
+        // or focus the library window, since the menu bar may have no room left to show
+        // the tray icon (docs/impl/library.md > Window).
         #[cfg(target_os = "macos")]
-        RunEvent::Reopen { .. } => windows::open_panel(app_handle),
+        RunEvent::Reopen { .. } => library::open_window(app_handle),
         // Exiting without a request first (for example the OS logging out): finish a
         // running session here. Blocking the main thread is safe: the session thread
         // never waits for it (ui.rs).

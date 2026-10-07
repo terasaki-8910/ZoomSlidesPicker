@@ -43,16 +43,21 @@ pub struct Shell {
     /// The snapshot `begin_region` captured, until `start_session` or `cancel_region`.
     pub pending_region: Option<ipc_types::Snapshot>,
     pub app_version: String,
+    /// Save roots used before the current one, Rust-only (docs/impl/library.md > Roots):
+    /// not part of `Settings`, so the UI never sends or sees it. `set_settings` appends the
+    /// old `saveRoot` here when it changes, and keeps the rest as-is.
+    pub known_roots: Vec<String>,
 }
 
 impl Shell {
-    pub fn new(app_version: String, settings: Settings) -> Self {
+    pub fn new(app_version: String, settings: Settings, known_roots: Vec<String>) -> Self {
         Self {
             settings,
             session: None,
             last_session: None,
             pending_region: None,
             app_version,
+            known_roots,
         }
     }
 }
