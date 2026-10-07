@@ -259,9 +259,10 @@
   footer.next { padding-block: 24px 48px; border-top: 1px solid var(--rule); margin-top: 28px; }
 </style>
 
+
 <header class="top">
   <div class="wrap">
-    <p class="round">ラウンド 2 ・ 仕様の確定</p>
+    <p class="round">ラウンド 3 ・ 重複の修正と履歴の窓</p>
     <div class="status">
       <span id="progress">回答 0 / 9</span>
       <span id="save" role="status" aria-live="polite">保存先を確かめています…</span>
@@ -272,355 +273,309 @@
 <main class="wrap">
   <header class="intro">
     <h1>ZoomSlidesPicker 判断シート</h1>
-    <p class="lede">ラウンド 1 の回答をもとに、SPEC（何を作るか）、ACCEPTANCE（合格の条件）、design_brief（見た目の決まりと文言）の草案を作りました。ここで GO が出れば仕様を確定し、次の段階（テストを書く criteria）に進めます。質問は 9 問です。推奨が先頭にあり、選ぶと自動で保存されます。</p>
+    <p class="lede">今日いただいた 2 つの依頼のまとめです。「同じ画面で 17 枚とっている」不具合は直して取り込みました。結果の確認と、残っている整理の仕方を聞きます。「履歴の窓」は、試作の画面を見て形を決めてから作ります。質問は 9 問です。推奨が先頭にあり、選ぶと自動で保存されます。</p>
   </header>
 
   <section class="block" aria-labelledby="h-state">
     <h2 id="h-state">作業の状態</h2>
     <dl class="state">
-      <dt>草案</dt>
-      <dd>SPEC、ACCEPTANCE、design_brief、設定の変更は、ブランチ <code>intake/r2-spec</code>（<code>36f0210</code>）。main には未マージ。</dd>
-      <dt>試作と fixture</dt>
-      <dd>ブランチ <code>intake/r2-samples</code>（<code>7ce0134</code>）。未マージ。</dd>
-      <dt>本体</dt>
-      <dd>未着手。</dd>
-      <dt>Windows の確認</dt>
-      <dd>結果待ち（あなたが実行中）。結果で Windows の撮り方（xcap の既定か <code>wgc</code> か）が決まります。質問ではありません。</dd>
-      <dt>あなたの確認（任意）</dt>
-      <dd>SharePoint で録画ファイルを受け取れるか（R1-4 の続き）。受け取れるなら、v2 で録画からの抽出と時間を比べます。</dd>
+      <dt>重複の修正</dt>
+      <dd>0.1.1 に入っています。Mac 版は <code>target/release/bundle/dmg/ZoomSlidesPicker_0.1.1_aarch64.dmg</code>。今の Mac で動いているのは直す前の 0.1.0 なので、入れ替えてください（署名がないので、画面収録の許可をもう一度求められます）。</dd>
+      <dt>Safari の授業動画での検証</dt>
+      <dd>実行中（26_01_02.mp4、1.5 倍速）。結果はチャットで報告します。</dd>
+      <dt>Windows</dt>
+      <dd>パネルが開いてすぐ閉じる問題を直した 0.1.1 を送りました。あなたの再確認待ち。</dd>
+      <dt>履歴の窓</dt>
+      <dd>試作のみ（見本のデータで動き、Rust にはつないでいない）。ブランチ <code>feat/library-proto</code>、未マージ。仕様の下書きは下の R3-5 にあります。窓から記録を開始・停止できるようにすることは、あなたの依頼で決まっています（下の R3-7 の上）。</dd>
     </dl>
   </section>
 
   <section class="block" aria-labelledby="h-found">
-    <h2 id="h-found">ラウンド 1 の後に分かったこと</h2>
-    <p class="muted">あなたの選択（R1-5 b、R1-6 a、R1-7 a）で試作を作り直し、6 本の fixture で確かめました。サンプルは合成の画面で、実際の授業の画面ではありません。</p>
+    <h2 id="h-found">不具合の原因と、直した結果</h2>
+    <p class="muted">サンプルの画像は合成の画面（fixture F7）です。実際の授業の画面は、このページには載せていません。</p>
 
     <div class="finding">
-      <h3>ぼやけてから鮮明になる画面（F3）</h3>
-      <p>画面共有は、切り替えの直後にぼやけて、少し遅れて鮮明になることがあります。最初の試作は、鮮明になる変化を別のスライドとして扱い、4 件のはずが 6 件になりました。「何も消えておらず、細かさが 1.2 倍以上になった変化は同じスライド」という規則を足し、各スライドの鮮明な版だけを保存するようにしました。</p>
+      <h3>原因</h3>
+      <p>録画の講義（Safari で再生した mp4）の右下に、先生のカメラの映像が丸い窓で重なっていました。顔は数秒おきに少しだけ変わり、動画のように動き続けもせず、止まったままにもならないので、「動いている所は比べない」という規則に一度も当たりませんでした。そのため、顔が変わるたびに新しいスライドとして保存していました。最初の 3 分半で 21 枚、そのうち同じスライドが 20 枚です。</p>
+    </div>
+
+    <div class="finding">
+      <h3>直し方</h3>
+      <p>同じ小さな四角の中だけが、10 秒以内に 3 回変わったら「生きた映像」とみなし、比べる対象から外します。2 分変わらなければ比べる対象に戻します。箇条書きの追加やスライドの切り替えは同じ所を 1 回しか変えず、再生中の動画は毎回変わるので、どちらも当たりません。レーザーポインターやカーソルの小さな変化は数えないので、文字の上をなぞっても文字は外れません。</p>
+      <p>動画が止まった後の見た目（R1-5 b）は今までどおり 1 枚残ります。ただし保存は、止まってから 15 秒後か、次のスライドに替わったときになります。止まったのか、カメラが一瞬止まっただけなのかを見分けるためです。</p>
+    </div>
+
+    <div class="finding">
+      <h3>結果</h3>
+      <ul>
+        <li>実際の授業の窓を 150 秒記録して判定に通した：直す前 13 枚、直した後 2 枚（正しくは 2 枚）。記録は確認の後に消しました。</li>
+        <li>同じく 300 秒：直す前 27 枚、直した後 4 枚。4 枚とも実際の画面の変化です（スライドの切り替え 2 回、最初の 1 枚、Safari の表示が暗くなった 1 回）。</li>
+        <li>同じ状況の合成の画面（F7、140 秒）：直す前 19 枚、直した後 3 枚（正しい数）。</li>
+        <li>レーザーで同じ行を行き来した後、次のスライドの箇条書きがその行に出る画面（F8）：箇条書き 3 つがそろった 1 枚。</li>
+        <li>前からの合成の画面（F1〜F6）と、ほかのテストはすべて合格。</li>
+      </ul>
       <figure class="shots">
-        <button type="button" class="zoomable" data-src="assets/r2/f3_crop.png" data-alt="最初に届いたぼやけた画面と、保存された鮮明な画像">
-          <img src="assets/r2/f3_crop.png" alt="最初に届いたぼやけた画面と、保存された鮮明な画像" loading="lazy">
+        <button type="button" class="zoomable" data-src="assets/r3/f7_before.png" data-alt="直す前：F7 で保存された 19 枚">
+          <img src="assets/r3/f7_before.png" alt="直す前：F7 で保存された 19 枚" loading="lazy" width="1340" height="762">
         </button>
-        <figcaption>左：最初に届いた画面（ぼやけている）。右：保存された画像。</figcaption>
-        <button type="button" class="zoomable" data-src="assets/r2/montage_F3.png" data-alt="F3 で保存された 4 件">
-          <img src="assets/r2/montage_F3.png" alt="F3 で保存された 4 件" loading="lazy">
+        <figcaption>直す前：F7 で保存された 19 枚。顔の窓が変わるたびに、同じスライドが増えています。</figcaption>
+        <button type="button" class="zoomable" data-src="assets/r3/f7_after.png" data-alt="直した後：F7 で保存された 3 枚">
+          <img src="assets/r3/f7_after.png" alt="直した後：F7 で保存された 3 枚" loading="lazy" width="1000" height="234">
         </button>
+        <figcaption>直した後：3 枚（A、B の最終状態、C）。最初の A に戻ったところは「戻った」記録が 1 件。</figcaption>
       </figure>
     </div>
 
     <div class="finding">
-      <h3>暗い背景のスライド（F6）</h3>
-      <p>暗い背景では、箇条書きが増えると画面が明るくなります。前の規則では、これを「消えた」と見て別のスライドにするおそれがありました。背景の明るさを基準にしたので、3 つの箇条書きは 1 枚にまとまります。</p>
-      <figure class="shots">
-        <button type="button" class="zoomable" data-src="assets/r2/montage_F6.png" data-alt="F6 で保存された 2 件">
-          <img src="assets/r2/montage_F6.png" alt="F6 で保存された 2 件" loading="lazy">
-        </button>
-      </figure>
-    </div>
-
-    <div class="finding">
-      <h3>黒と灰色の画面、カーソルとレーザー（F4、F5）</h3>
-      <p>単色の画面は保存せず、10 秒続いたら 1 回知らせます。カーソル、レーザー、切り替えの効果（0.6 秒の重ね合わせ）では保存されず、保存したスライドにカーソルは写りません。</p>
-      <figure class="shots">
-        <button type="button" class="zoomable" data-src="assets/r2/montage_F4.png" data-alt="F4 で保存された 2 件">
-          <img src="assets/r2/montage_F4.png" alt="F4 で保存された 2 件" loading="lazy">
-        </button>
-        <button type="button" class="zoomable" data-src="assets/r2/montage_F5.png" data-alt="F5 で保存された 2 件">
-          <img src="assets/r2/montage_F5.png" alt="F5 で保存された 2 件" loading="lazy">
-        </button>
-      </figure>
-    </div>
-
-    <div class="finding">
-      <h3>あなたの選択での授業（F1）と 2 倍速（F2）</h3>
-      <p>F1 は 7 件です。R1-5 b のとおり、動画が止まった後の見た目が 1 枚入ります。F2（2 倍速）は 6 件です。追記の間隔が短くなるので、スライド 5 の箇条書きとペンの書き込みが 1 枚にまとまります。mp4 から読んだ F1（R1-9 のモード）も、同じ 7 件でした。</p>
-      <figure class="shots">
-        <button type="button" class="zoomable" data-src="assets/r2/montage_F1.png" data-alt="F1 で保存された 7 件">
-          <img src="assets/r2/montage_F1.png" alt="F1 で保存された 7 件" loading="lazy">
-        </button>
-        <button type="button" class="zoomable" data-src="assets/r2/montage_F2.png" data-alt="F2 で保存された 6 件">
-          <img src="assets/r2/montage_F2.png" alt="F2 で保存された 6 件" loading="lazy">
-        </button>
-      </figure>
-    </div>
-
-    <div class="finding">
-      <h3>直したこと</h3>
-      <p>F4 の「戻り」の期待値を 1 件から 0 件に直しました。黒い画面の後に同じスライドに戻るのは、前のスライドへの戻りではないからです。期待値は実行の前に決めていましたが、これは実行の後で定義の誤りに気づいて直しました。</p>
-      <p>メモリの既定を変えました。保留中のスライドの画像を 1 枚持ちます（2000 × 1400 の範囲で約 11 MB）。前の「保存する瞬間だけ」では、別のスライドに切り替わった時点で、保存すべき画像がもう画面にありません。</p>
+      <h3>直しても同じスライドが残る場合</h3>
+      <p>今日の記録（284 枚の時点）を、直した判定に通し直すと 36 枚が残ります。残りの中に、同じスライドに見えるものが 2 種類あります。1 つは、箇条書きを順に出すスライドで、先生が次の行を出すまで 20〜40 秒話すため、段階ごとに 1 枚ずつ残るもの（R3-2）。もう 1 つは、マウスが動画に乗って再生バーが出た版です。こちらはマウスを動画の外に置くと防げます（README の既知の制約に書きました）。</p>
     </div>
   </section>
 
   <form id="questions" novalidate>
 
-    <section class="q" data-q="R2-1" data-kind="radio" aria-labelledby="t-R2-1">
-      <h2 class="q-title" id="t-R2-1"><span class="qid">R2-1</span>アプリの形</h2>
-      <p class="ctx">「開始」「停止」などの操作をどこに置くかです。色や字の大きさは、この後の design gate で決めます。下の図はどちらもモックです。</p>
+    <section class="q" data-q="R3-1" data-kind="radio" aria-labelledby="t-R3-1">
+      <h2 class="q-title" id="t-R3-1"><span class="qid">R3-1</span>重複の修正</h2>
+      <p class="ctx">上の結果で受け入れるかです。次の授業で新しい版を使って、気になる点があれば教えてください。</p>
       <fieldset class="opts">
-        <legend class="sr-only">アプリの形</legend>
+        <legend class="sr-only">重複の修正</legend>
         <div class="opt">
-          <label><input type="radio" name="R2-1" value="a" data-label="a　常駐型">
-            <span><span class="opt-title">a　常駐型<span class="rec">推奨</span></span>
-              <span class="opt-desc">常駐アイコンを押すと、小さなパネルが出る。授業中は画面を占めない。Mac は Dock にも出さない。</span>
-              <span class="opt-why">授業中は Zoom などの窓を大きく使うので、邪魔にならない。</span>
+          <label><input type="radio" name="R3-1" value="ok" data-label="これでよい">
+            <span><span class="opt-title">これでよい<span class="rec">推奨</span></span>
+              <span class="opt-desc">次の授業で新しい版を使って確かめる。</span>
             </span>
           </label>
-          <div class="mock" aria-label="常駐型のモック">
-            <span class="mock-tag">モック</span>
-            <div class="mock-bar"><span class="mock-icon" aria-hidden="true"></span><span>12</span></div>
-            <div class="mock-pop">
-              <div class="mock-row"><span>保存中</span><span class="n">12 枚</span></div>
-              <img class="mock-thumb" src="assets/r2/thumb.png" alt="直前に保存したスライドの小さな画像" loading="lazy" width="320" height="180">
-              <div class="mock-primary">停止</div>
-              <div class="mock-secondary"><span>一時停止</span><span>今すぐ保存</span><span>直前の保存を取り消す</span></div>
-              <div class="mock-row"><span class="muted">保存先を開く</span><span class="muted">設定</span></div>
-            </div>
-          </div>
         </div>
         <div class="opt">
-          <label><input type="radio" name="R2-1" value="b" data-label="b　窓型">
-            <span><span class="opt-title">b　窓型</span>
-              <span class="opt-desc">普通の窓に、範囲のプレビューと操作を並べる。閉じると常駐アイコンに隠れる。範囲が大きく見えるが、画面の場所を取る。</span>
+          <label><input type="radio" name="R3-1" value="concern" data-label="気になる点がある">
+            <span><span class="opt-title">気になる点がある</span>
+              <span class="opt-desc">メモに書いてください。</span>
             </span>
           </label>
-          <div class="mock" aria-label="窓型のモック">
-            <span class="mock-tag">モック</span>
-            <div class="mock-win">
-              <div class="mock-title">ZoomSlidesPicker</div>
-              <div class="mock-body">
-                <img class="mock-thumb" src="assets/r2/thumb.png" alt="範囲のプレビュー" loading="lazy" width="320" height="180">
-                <div class="side">
-                  <div class="mock-row"><span>保存中</span><span class="n">12 枚</span></div>
-                  <div class="mock-primary">停止</div>
-                  <div class="mock-secondary"><span>一時停止</span><span>今すぐ保存</span><span>直前の保存を取り消す</span></div>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </fieldset>
-      <div class="memo"><label for="memo-R2-1">メモ（任意）</label><textarea id="memo-R2-1" rows="2"></textarea></div>
+      <div class="memo"><label for="memo-R3-1">メモ（任意）</label><textarea id="memo-R3-1" rows="2"></textarea></div>
     </section>
 
-    <section class="q" data-q="R2-2" data-kind="radio" aria-labelledby="t-R2-2">
-      <h2 class="q-title" id="t-R2-2"><span class="qid">R2-2</span>見た目の決まりと主な文言（design_brief.md）</h2>
-      <p class="ctx">見た目の「すること・しないこと」と、画面と通知に出る主な文言（日本語と英語）です。色や字の大きさは design gate で決めます。</p>
+    <section class="q" data-q="R3-2" data-kind="radio" aria-labelledby="t-R3-2">
+      <h2 class="q-title" id="t-R3-2"><span class="qid">R3-2</span>箇条書きを順に出すスライド</h2>
+      <p class="ctx">ラウンド 1 では R1-6 で「a 最終状態だけ残す（直前の版を置き換える）」を選んでいただきました。今の作りは、5 秒以内に続いた追加だけを 1 枚にまとめ、間が空いた追加は別の 1 枚として残します。実際の授業では、先生が次の行を出すまで話すので、段階ごとに残りました。下の図は合成の見本です。</p>
+      <figure class="shots">
+        <button type="button" class="zoomable" data-src="assets/r3/build_steps.png" data-alt="段階ごとに 3 枚残る例">
+          <img src="assets/r3/build_steps.png" alt="段階ごとに 3 枚残る例" loading="lazy" width="1000" height="234">
+        </button>
+        <figcaption>今の作り：同じスライドが 3 枚残る。a にすると、残るのは右の 1 枚だけ。</figcaption>
+      </figure>
       <fieldset class="opts">
-        <legend class="sr-only">design_brief.md</legend>
+        <legend class="sr-only">箇条書きを順に出すスライド</legend>
         <div class="opt">
-          <label><input type="radio" name="R2-2" value="go" data-label="この内容で">
-            <span><span class="opt-title">この内容で<span class="rec">推奨</span></span></span>
+          <label><input type="radio" name="R3-2" value="a" data-label="a　足されただけなら前の 1 枚を置き換える">
+            <span><span class="opt-title">a　足されただけなら、前の 1 枚を置き換える<span class="rec">推奨</span></span>
+              <span class="opt-desc">保存した 1 枚に文字や線が足されただけ（何も消えていない）なら、その 1 枚を新しい版に置き換える。前の版はごみ箱へ。途中の段階は残らない。</span>
+              <span class="opt-why">R1-6 で選んだ「最終状態だけ残す」に合う。</span>
+            </span>
           </label>
         </div>
         <div class="opt">
-          <label><input type="radio" name="R2-2" value="fix" data-label="直してから">
-            <span><span class="opt-title">直してから</span>
-              <span class="opt-desc">直す点をメモに書いてください。</span>
+          <label><input type="radio" name="R3-2" value="b" data-label="b　今のまま">
+            <span><span class="opt-title">b　今のまま</span>
+              <span class="opt-desc">5 秒以内の追加だけまとめる。間が空いた追加は、段階ごとに残る。</span>
             </span>
           </label>
+        </div>
+      </fieldset>
+      <div class="memo"><label for="memo-R3-2">メモ（任意）</label><textarea id="memo-R3-2" rows="2"></textarea></div>
+    </section>
+
+    <section class="q" data-q="R3-3" data-kind="radio" aria-labelledby="t-R3-3">
+      <h2 class="q-title" id="t-R3-3"><span class="qid">R3-3</span>今日の記録（12:42 から）の重複</h2>
+      <p class="ctx">直す前の版で撮ったので、同じスライドが 200 枚以上あります。直した判定で選び直すと、284 枚の時点で残るのは 36 枚です。R3-2 で a を選んだ場合は、段階の途中の版も除きます。どれも授業が終わって停止した後に行います。</p>
+      <fieldset class="opts">
+        <legend class="sr-only">今日の記録の重複</legend>
+        <div class="opt">
+          <label><input type="radio" name="R3-3" value="a" data-label="a　直した判定で選び直して整理する">
+            <span><span class="opt-title">a　直した判定で選び直して整理する<span class="rec">推奨</span></span>
+              <span class="opt-desc">残す画像の一覧を先にチャットで見せ、OK の後に、残りをごみ箱へ移して PDF を作り直す。ごみ箱から戻せる。</span>
+            </span>
+          </label>
+        </div>
+        <div class="opt">
+          <label><input type="radio" name="R3-3" value="b" data-label="b　履歴の窓ができてから自分で">
+            <span><span class="opt-title">b　履歴の窓ができてから、自分でまとめる</span>
+              <span class="opt-desc">R3-7 の「同じスライドをまとめる」を使う。</span>
+            </span>
+          </label>
+        </div>
+        <div class="opt">
+          <label><input type="radio" name="R3-3" value="c" data-label="c　そのまま">
+            <span><span class="opt-title">c　そのまま</span></span>
+          </label>
+        </div>
+      </fieldset>
+      <div class="memo"><label for="memo-R3-3">メモ（任意）</label><textarea id="memo-R3-3" rows="2"></textarea></div>
+    </section>
+
+    <section class="q" data-q="R3-4" data-kind="radio" aria-labelledby="t-R3-4">
+      <h2 class="q-title" id="t-R3-4"><span class="qid">R3-4</span>履歴の窓の形</h2>
+      <p class="ctx">依頼の言葉：「常駐のバーのアプリとは別にウィンドウで開くアプリでこれまでの履歴とかをvoice transcriptみたいに検索、フォルダを開くとかのものができるようにしてください。」</p>
+      <fieldset class="opts">
+        <legend class="sr-only">履歴の窓の形</legend>
+        <div class="opt">
+          <label><input type="radio" name="R3-4" value="a" data-label="a　同じアプリの「履歴」の窓">
+            <span><span class="opt-title">a　同じアプリの中の「履歴」の窓<span class="rec">推奨</span></span>
+              <span class="opt-desc">普通の窓として開き、開いている間は Dock と ⌘Tab に出る。閉じると、今までどおり常駐アイコンだけに戻る。入れるアプリは 1 つのまま。</span>
+              <span class="opt-why">更新も画面収録の許可も 1 つで済み、設定も共有できる。</span>
+            </span>
+          </label>
+        </div>
+        <div class="opt">
+          <label><input type="radio" name="R3-4" value="b" data-label="b　別のアプリ">
+            <span><span class="opt-title">b　別のアプリ（履歴だけを見るアプリ）</span>
+              <span class="opt-desc">アプリが 2 つになる。入れ替えや更新も 2 つ。</span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
+      <div class="memo"><label for="memo-R3-4">メモ（任意）</label><textarea id="memo-R3-4" rows="2"></textarea></div>
+    </section>
+
+    <section class="q" data-q="R3-5" data-kind="radio" aria-labelledby="t-R3-5">
+      <h2 class="q-title" id="t-R3-5"><span class="qid">R3-5</span>履歴の窓の配置</h2>
+      <p class="ctx">どちらも試作の実際の画面（見本のデータ）です。上の帯は、今の記録の状態と「開始」「停止」です。押すと拡大します。狭い窓では、左の一覧の日時の行が折り返して窮屈なので、作るときに整えます。</p>
+      <fieldset class="opts">
+        <legend class="sr-only">履歴の窓の配置</legend>
+        <div class="opt">
+          <label><input type="radio" name="R3-5" value="a" data-label="a　左に一覧と検索、右にスライド">
+            <span><span class="opt-title">a　左に一覧と検索、右に選んだ記録のスライド<span class="rec">推奨</span></span>
+              <span class="opt-desc">記録を選ぶと、右にその回のスライドが並ぶ。一覧と中身を行き来せずに見比べられる。</span>
+            </span>
+          </label>
+          <figure class="shots">
+            <button type="button" class="zoomable" data-src="assets/r3/library-a-light.png" data-alt="a の画面（ライト、1280 × 800）">
+              <img src="assets/r3/library-a-light.png" alt="a の画面（ライト、1280 × 800）" loading="lazy">
+            </button>
+            <button type="button" class="zoomable" data-src="assets/r3/library-a-dark.png" data-alt="a の画面（ダーク、1280 × 800）">
+              <img src="assets/r3/library-a-dark.png" alt="a の画面（ダーク、1280 × 800）" loading="lazy">
+            </button>
+            <button type="button" class="zoomable" data-src="assets/r3/library-a-narrow-light.png" data-alt="a の画面（狭い窓、760 × 600）">
+              <img src="assets/r3/library-a-narrow-light.png" alt="a の画面（狭い窓、760 × 600）" loading="lazy">
+            </button>
+            <figcaption>上からライト、ダーク、狭い窓（760 × 600）。</figcaption>
+          </figure>
+        </div>
+        <div class="opt">
+          <label><input type="radio" name="R3-5" value="b" data-label="b　一覧だけ">
+            <span><span class="opt-title">b　一覧だけ（voice transcript の履歴に近い形）</span>
+              <span class="opt-desc">行ごとに「開く」「フォルダ」「PDF」「削除」。「開く」でスライドの一覧に切り替わり、「戻る」で一覧に戻る。</span>
+            </span>
+          </label>
+          <figure class="shots">
+            <button type="button" class="zoomable" data-src="assets/r3/library-b-light.png" data-alt="b の一覧（ライト）">
+              <img src="assets/r3/library-b-light.png" alt="b の一覧（ライト）" loading="lazy">
+            </button>
+            <button type="button" class="zoomable" data-src="assets/r3/library-b-open-light.png" data-alt="b で記録を開いたところ（ライト）">
+              <img src="assets/r3/library-b-open-light.png" alt="b で記録を開いたところ（ライト）" loading="lazy">
+            </button>
+            <figcaption>上が一覧、下が「開く」を押したところ。</figcaption>
+          </figure>
         </div>
       </fieldset>
       <details class="doc">
-        <summary>design_brief.md を開く</summary>
-        <div class="doc-body" data-md="round2/design_brief.md">読み込んでいます…</div>
+        <summary>仕様の下書き（docs/impl/library.md）を開く</summary>
+        <div class="doc-body" data-md="round3/library.md">読み込んでいます…</div>
       </details>
-      <div class="memo"><label for="memo-R2-2">メモ（任意）</label><textarea id="memo-R2-2" rows="2"></textarea></div>
+      <div class="memo"><label for="memo-R3-5">メモ（任意）</label><textarea id="memo-R3-5" rows="2"></textarea></div>
     </section>
 
-    <section class="q" data-q="R2-3" data-kind="check" aria-labelledby="t-R2-3">
-      <h2 class="q-title" id="t-R2-3"><span class="qid">R2-3</span>v1 に足す小さな機能（複数選択）</h2>
-      <p class="ctx">ラウンド 1 で「保存一覧の画面」を入れなかったので、Finder やエクスプローラーで画像を消した後に、PDF を作り直す手段がありません。チェックが入っているのは推奨です。</p>
+    <section class="q" data-q="R3-6" data-kind="check" aria-labelledby="t-R3-6">
+      <h2 class="q-title" id="t-R3-6"><span class="qid">R3-6</span>検索の対象（複数選択）</h2>
+      <p class="ctx">voice transcript は文字起こしの本文も検索できますが、このアプリの記録には文字がありません（画像だけ）。チェックが入っているのは推奨です。空白で区切った言葉は、すべてに当たる記録だけが残ります。</p>
       <fieldset class="opts">
-        <legend class="sr-only">v1 に足す小さな機能</legend>
-        <div class="opt"><label><input type="checkbox" name="R2-3" value="rebuild-pdf" checked data-label="PDF を作り直す（直前のセッション）"><span><span class="opt-title">PDF を作り直す（直前のセッション）</span><span class="opt-desc">フォルダに残っている画像だけで PDF を作り直す。</span></span></label></div>
-        <div class="opt"><label><input type="checkbox" name="R2-3" value="open-folder" checked data-label="保存先のフォルダを開く"><span><span class="opt-title">保存先のフォルダを開く</span><span class="opt-desc">パネルと、停止の通知から開ける。</span></span></label></div>
+        <legend class="sr-only">検索の対象</legend>
+        <div class="opt"><label><input type="checkbox" name="R3-6" value="title" checked data-label="題名"><span><span class="opt-title">題名</span><span class="opt-desc">付けた名前、窓の題名（例：Zoom ミーティング）、動画のファイル名。</span></span></label></div>
+        <div class="opt"><label><input type="checkbox" name="R3-6" value="date" checked data-label="日付"><span><span class="opt-title">日付</span><span class="opt-desc"><code>10/7</code>、<code>10月7日</code>、<code>2026-10-07</code> のどれでも。</span></span></label></div>
+        <div class="opt"><label><input type="checkbox" name="R3-6" value="app" checked data-label="アプリ名"><span><span class="opt-title">アプリ名</span><span class="opt-desc">Safari、zoom.us など、撮った窓のアプリ。</span></span></label></div>
+        <div class="opt"><label><input type="checkbox" name="R3-6" value="memo" data-label="メモ"><span><span class="opt-title">メモ</span><span class="opt-desc">R3-7 でメモを入れる場合だけ。</span></span></label></div>
+        <div class="opt"><label><input type="checkbox" name="R3-6" value="ocr" data-label="スライドの文字（文字認識）"><span><span class="opt-title">スライドの文字（文字認識）</span><span class="opt-desc">保存した画像から文字を読み取って検索できるようにする。読み取りに時間がかかり、作る量も大きいので、入れるなら次の版で別に作る。</span></span></label></div>
       </fieldset>
-      <div class="memo"><label for="memo-R2-3">メモ（任意）</label><textarea id="memo-R2-3" rows="2"></textarea></div>
+      <div class="memo"><label for="memo-R3-6">メモ（任意）</label><textarea id="memo-R3-6" rows="2"></textarea></div>
     </section>
 
-    <section class="q" data-q="R2-4" data-kind="radio" aria-labelledby="t-R2-4">
-      <h2 class="q-title" id="t-R2-4"><span class="qid">R2-4</span>SPEC.md（何を作るか）</h2>
-      <p class="ctx">全体の仕様です。判断の正本は DECISIONS.md で、食い違えばそちらが優先します。R2-1 と R2-3 の答えは、GO の後に SPEC に反映します。</p>
+    <section class="q" data-q="R3-7" data-kind="check" aria-labelledby="t-R3-7">
+      <h2 class="q-title" id="t-R3-7"><span class="qid">R3-7</span>履歴の窓でできること（複数選択）</h2>
+      <p class="ctx">チェックが入っているのは推奨です。消す操作はすべて OS のごみ箱へ移すので、元に戻せます。開始と停止は、あなたの依頼（「常駐のバーからの開始だけでなくウィンドウからの開始もできるようにしてください」）のとおり、この窓の上の帯に置きます。ここでは聞きません。</p>
       <fieldset class="opts">
-        <legend class="sr-only">SPEC.md</legend>
+        <legend class="sr-only">履歴の窓でできること</legend>
+        <div class="opt"><label><input type="checkbox" name="R3-7" value="open-folder" checked data-label="フォルダを開く"><span><span class="opt-title">フォルダを開く</span></span></label></div>
+        <div class="opt"><label><input type="checkbox" name="R3-7" value="open-pdf" checked data-label="PDF を開く"><span><span class="opt-title">PDF を開く</span></span></label></div>
+        <div class="opt"><label><input type="checkbox" name="R3-7" value="rebuild-pdf" checked data-label="PDF を作り直す"><span><span class="opt-title">PDF を作り直す</span><span class="opt-desc">今は直前の記録だけ。どの記録でもできるようにする。</span></span></label></div>
+        <div class="opt"><label><input type="checkbox" name="R3-7" value="rename" checked data-label="名前を変更"><span><span class="opt-title">名前を変更</span><span class="opt-desc">「デジタル人文学 第1回」のように。付けた名前は記録のフォルダの session.json に書く。</span></span></label></div>
+        <div class="opt"><label><input type="checkbox" name="R3-7" value="delete-session" checked data-label="記録をごみ箱へ"><span><span class="opt-title">記録をごみ箱へ</span><span class="opt-desc">1 回分のフォルダごと。</span></span></label></div>
+        <div class="opt"><label><input type="checkbox" name="R3-7" value="delete-images" checked data-label="画像を選んでごみ箱へ"><span><span class="opt-title">画像を選んでごみ箱へ</span><span class="opt-desc">選んで消した後、PDF を作り直す。</span></span></label></div>
+        <div class="opt"><label><input type="checkbox" name="R3-7" value="dedupe" checked data-label="同じスライドをまとめる"><span><span class="opt-title">同じスライドをまとめる</span><span class="opt-desc">直した判定でその回の画像を見直し、重複を選んだ状態にする。確かめてから「ごみ箱へ」。直す前の版で撮った記録の整理に使う。</span></span></label></div>
+        <div class="opt"><label><input type="checkbox" name="R3-7" value="memo" data-label="メモ"><span><span class="opt-title">メモ</span><span class="opt-desc">記録ごとに短いメモを書ける。</span></span></label></div>
+      </fieldset>
+      <div class="memo"><label for="memo-R3-7">メモ（任意）</label><textarea id="memo-R3-7" rows="2"></textarea></div>
+    </section>
+
+    <section class="q" data-q="R3-8" data-kind="radio" aria-labelledby="t-R3-8">
+      <h2 class="q-title" id="t-R3-8"><span class="qid">R3-8</span>アプリを開いたとき（Finder、Spotlight、Dock から）</h2>
+      <p class="ctx">今は、起動中にもう一度開くとパネルが画面の中央に出ます（メニューバーのアイコンが隠れていたため）。履歴の窓ができたら、どちらを開くかです。「上のバーが埋まっていることが多く、わざわざ探すのが大変」という依頼には、a が合います。</p>
+      <fieldset class="opts">
+        <legend class="sr-only">アプリを開いたとき</legend>
         <div class="opt">
-          <label><input type="radio" name="R2-4" value="go" data-label="GO">
-            <span><span class="opt-title">GO（この内容で確定）<span class="rec">推奨</span></span></span>
-          </label>
-        </div>
-        <div class="opt">
-          <label><input type="radio" name="R2-4" value="fix" data-label="直してから">
-            <span><span class="opt-title">直してから</span>
-              <span class="opt-desc">直す点をメモに書いてください。直した版を次のラウンドで見せます。</span>
+          <label><input type="radio" name="R3-8" value="a" data-label="a　履歴の窓を開く">
+            <span><span class="opt-title">a　履歴の窓を開く<span class="rec">推奨</span></span>
+              <span class="opt-desc">最初の起動でも、起動中にもう一度開いたときも。パネルは今までどおり常駐アイコンから。</span>
+              <span class="opt-why">普通のアプリと同じ動きになり、アイコンが見えなくても困らない。</span>
             </span>
           </label>
         </div>
-      </fieldset>
-      <details class="doc">
-        <summary>SPEC.md を開く</summary>
-        <div class="doc-body" data-md="round2/SPEC.md">読み込んでいます…</div>
-      </details>
-      <div class="memo"><label for="memo-R2-4">メモ（任意）</label><textarea id="memo-R2-4" rows="2"></textarea></div>
-    </section>
-
-    <section class="q" data-q="R2-5" data-kind="radio" aria-labelledby="t-R2-5">
-      <h2 class="q-title" id="t-R2-5"><span class="qid">R2-5</span>ACCEPTANCE.md（合格の条件）</h2>
-      <p class="ctx">A〜C は機械で判定し、D は実機で人が実行し、E は人が確かめます。A の数値は、すべて試作で通ることを確かめました。</p>
-      <fieldset class="opts">
-        <legend class="sr-only">ACCEPTANCE.md</legend>
         <div class="opt">
-          <label><input type="radio" name="R2-5" value="go" data-label="GO">
-            <span><span class="opt-title">GO（この内容で確定）<span class="rec">推奨</span></span></span>
-          </label>
-        </div>
-        <div class="opt">
-          <label><input type="radio" name="R2-5" value="fix" data-label="直してから">
-            <span><span class="opt-title">直してから</span>
-              <span class="opt-desc">直す点をメモに書いてください。</span>
+          <label><input type="radio" name="R3-8" value="b" data-label="b　パネルを開く（今のまま）">
+            <span><span class="opt-title">b　パネルを開く（今のまま）</span>
+              <span class="opt-desc">履歴の窓は、パネルとメニューの「履歴…」から開く。</span>
             </span>
           </label>
         </div>
       </fieldset>
-      <details class="doc">
-        <summary>ACCEPTANCE.md を開く</summary>
-        <div class="doc-body" data-md="round2/ACCEPTANCE.md">読み込んでいます…</div>
-      </details>
-      <div class="memo"><label for="memo-R2-5">メモ（任意）</label><textarea id="memo-R2-5" rows="2"></textarea></div>
+      <div class="memo"><label for="memo-R3-8">メモ（任意）</label><textarea id="memo-R3-8" rows="2"></textarea></div>
     </section>
 
-    <section class="q" data-q="R2-6" data-kind="radio" aria-labelledby="t-R2-6">
-      <h2 class="q-title" id="t-R2-6"><span class="qid">R2-6</span>一行の目的（CLAUDE.md）</h2>
-      <p class="ctx">テンプレートでは、あなたが書く欄です。案を 2 つ用意しました。</p>
+    <section class="q" data-q="R3-9" data-kind="radio" aria-labelledby="t-R3-9">
+      <h2 class="q-title" id="t-R3-9"><span class="qid">R3-9</span>作った後</h2>
       <fieldset class="opts">
-        <legend class="sr-only">一行の目的</legend>
+        <legend class="sr-only">作った後</legend>
         <div class="opt">
-          <label><input type="radio" name="R2-6" value="a" data-label="案 1">
-            <span><span class="opt-title">案 1（SPEC の目的と同じ文）<span class="rec">推奨</span></span>
-              <span class="opt-desc">授業の画面（Zoom のライブ、SharePoint の動画の再生など）から、先生がスライドを切り替えるたびにその画像を自動で保存し、授業の後にスライド一式（PNG と PDF）を手元に残す。Mac と Windows で動く。</span>
-              <span class="opt-why">SPEC と同じ文なので、食い違わない。</span>
+          <label><input type="radio" name="R3-9" value="merge" data-label="テストと検査が通れば取り込む">
+            <span><span class="opt-title">テストと検査が通れば取り込み、DMG を作る<span class="rec">推奨</span></span>
+              <span class="opt-desc">実際のアプリで画面を撮って確かめ、結果は次のシートで見せる。</span>
             </span>
           </label>
         </div>
         <div class="opt">
-          <label><input type="radio" name="R2-6" value="b" data-label="案 2">
-            <span><span class="opt-title">案 2（短い文）</span>
-              <span class="opt-desc">授業のスライドを、切り替わるたびに自動で保存する、Mac と Windows の常駐アプリ。</span>
-            </span>
-          </label>
-        </div>
-        <div class="opt">
-          <label><input type="radio" name="R2-6" value="c" data-label="書き直す">
-            <span><span class="opt-title">書き直す</span>
-              <span class="opt-desc">メモに文を書いてください。</span>
-            </span>
+          <label><input type="radio" name="R3-9" value="show" data-label="取り込む前に見せる">
+            <span><span class="opt-title">取り込む前に見せる</span></span>
           </label>
         </div>
       </fieldset>
-      <div class="memo"><label for="memo-R2-6">メモ（任意）</label><textarea id="memo-R2-6" rows="2"></textarea></div>
-    </section>
-
-    <section class="q" data-q="R2-7" data-kind="radio" aria-labelledby="t-R2-7">
-      <h2 class="q-title" id="t-R2-7"><span class="qid">R2-7</span>道具の提案</h2>
-      <p class="ctx">テンプレートの規則で、道具は「事実と照らせるもの」か「決まった検査をするもの」だけを提案します。入れるのはあなたです（承認すると、<code>state/TOOLING.md</code> と <code>state/init-tools.sh</code> を書きます。実行はあなた）。</p>
-      <fieldset class="opts">
-        <legend class="sr-only">道具の提案</legend>
-        <div class="opt">
-          <label><input type="radio" name="R2-7" value="a" data-label="権限の確認役を入れる">
-            <span><span class="opt-title">権限の確認役を入れる<span class="rec">推奨</span></span>
-              <span class="opt-desc">voice-transcript の <code>tauri-capability-reviewer</code>（サブエージェント）を、このリポジトリの場所に合わせて写す。Tauri の権限の設定（開けるフォルダの範囲など）を、Tauri が生成した ACL の一覧と照らして確かめる。</span>
-              <span class="opt-why">このアプリはフォルダを開き、ファイルを書くので、権限の広げすぎを機械的な一覧で確かめられる。</span>
-            </span>
-          </label>
-        </div>
-        <div class="opt">
-          <label><input type="radio" name="R2-7" value="b" data-label="何も入れない">
-            <span><span class="opt-title">何も入れない</span></span>
-          </label>
-        </div>
-      </fieldset>
-      <p class="note">提案しないもの：<code>tauri-command-scaffold</code>（雛形を作るだけで、検査ではない）。新しい MCP（Playwright と context7 は、もう使える）。</p>
-      <div class="memo"><label for="memo-R2-7">メモ（任意）</label><textarea id="memo-R2-7" rows="2"></textarea></div>
-    </section>
-
-    <section class="q" data-q="R2-8" data-kind="radio" aria-labelledby="t-R2-8">
-      <h2 class="q-title" id="t-R2-8"><span class="qid">R2-8</span>設定ファイルの変更</h2>
-      <p class="ctx">CLAUDE.md（名前、目的、言語、コマンド）、pipeline.yaml（名前、UI あり）、<code>.claude/settings.json</code>（cargo などの許可）、<code>.gitignore</code>（ビルドの出力など）、<code>scripts/gates.sh</code>（cargo と pnpm の両方を検査）。ヘッドレスの build は、許可にないコマンドを確かめられずに止まるので、先に足します。</p>
-      <fieldset class="opts">
-        <legend class="sr-only">設定ファイルの変更</legend>
-        <div class="opt">
-          <label><input type="radio" name="R2-8" value="go" data-label="この内容で">
-            <span><span class="opt-title">この内容で<span class="rec">推奨</span></span></span>
-          </label>
-        </div>
-        <div class="opt">
-          <label><input type="radio" name="R2-8" value="fix" data-label="直してから">
-            <span><span class="opt-title">直してから</span>
-              <span class="opt-desc">直す点をメモに書いてください。</span>
-            </span>
-          </label>
-        </div>
-      </fieldset>
-      <details class="doc">
-        <summary>変更の差分を開く</summary>
-        <pre class="diff" data-text="round2/config.diff">読み込んでいます…</pre>
-      </details>
-      <div class="memo"><label for="memo-R2-8">メモ（任意）</label><textarea id="memo-R2-8" rows="2"></textarea></div>
-    </section>
-
-    <section class="q" data-q="R2-9" data-kind="radio" aria-labelledby="t-R2-9">
-      <h2 class="q-title" id="t-R2-9"><span class="qid">R2-9</span>GO の後</h2>
-      <p class="ctx">R2-4 と R2-5 が GO だったときに、何をするかです。</p>
-      <fieldset class="opts">
-        <legend class="sr-only">GO の後</legend>
-        <div class="opt">
-          <label><input type="radio" name="R2-9" value="a" data-label="取り込んで intake を完了する">
-            <span><span class="opt-title">取り込んで intake を完了する<span class="rec">推奨</span></span>
-              <span class="opt-desc">草案、試作と fixture、キャプチャの確認の 3 つのブランチを main にマージする（<code>--no-ff</code>、ローカルのみで push はしない）。<code>state/done/intake</code> と <code>state/has_ui</code> を作る。criteria 以降は、あなたが <code>sh scripts/run.sh from criteria</code> で始める。</span>
-            </span>
-          </label>
-        </div>
-        <div class="opt">
-          <label><input type="radio" name="R2-9" value="b" data-label="マージの前に差分を見せる">
-            <span><span class="opt-title">マージの前に差分を見せる</span></span>
-          </label>
-        </div>
-      </fieldset>
-      <div class="memo"><label for="memo-R2-9">メモ（任意）</label><textarea id="memo-R2-9" rows="2"></textarea></div>
+      <div class="memo"><label for="memo-R3-9">メモ（任意）</label><textarea id="memo-R3-9" rows="2"></textarea></div>
     </section>
 
     <p class="note">選ばずに文章だけ書くと、その質問の答えは「その他」として保存されます。</p>
   </form>
 
   <section class="block" aria-labelledby="h-decided">
-    <h2 id="h-decided">聞かずに決めたこと（ラウンド 2）</h2>
+    <h2 id="h-decided">聞かずに決めたこと（ラウンド 3）</h2>
     <p class="muted">変えたいものがあれば、下の「その他」に書いてください。</p>
     <ol>
-      <li>ぼやけてから鮮明になる変化は同じスライドとして扱い、各スライドの最も鮮明なフレームを保存する（F3）。</li>
-      <li>追記と別のスライドは、背景の明るさを基準に見分ける（F6）。</li>
-      <li>単色の画面は保存しない。10 秒続いたら 1 回知らせる（F4）。</li>
-      <li>「戻り」は、前に保存したスライドに戻ったときだけ記録する。直前のスライドが続くだけなら記録しない。</li>
-      <li>保留中のスライドの画像を 1 枚持つ（メモリの既定の変更。上の「直したこと」）。</li>
-      <li>今すぐ保存、取り消し、一時停止の細かい動き（SPEC の判定 11〜13）。取り消した画像はごみ箱に移し、同じセッションでは同じ状態を再び保存しない。一時停止中も経過時間は進む。</li>
-      <li>比較の周期は既定 0.5 秒（設定で 0.5〜5 秒）。ほかの数値は内部の定数。</li>
-      <li>保存先、フォルダ名、ファイル名（SPEC の「出力」）。</li>
-      <li>ショートカットの既定値（設定で変えられる）。</li>
-      <li>枚数の表示は、Windows ではツールチップ（Windows はアイコンの横に文字を出せない。Tauri の仕様）。Mac は Dock に出さない。</li>
-      <li>mp4 モードは PC の ffmpeg を使う（同梱しない）。</li>
-      <li>パネルと設定の窓は、開くときに作り、閉じたら破棄する（メモリのため）。</li>
-      <li>構成（Cargo の分け方）と、テストのデータの持ち方（解析画像の列を PNG で入れる。約 0.7 MB）。</li>
-      <li>Windows の撮り方は、WINDOWS-CHECK の結果で決める。</li>
-      <li>Zoom の操作バーなど、一時的に重なるものは v1 では扱わない（既知の制約）。</li>
+      <li>重複の修正をすぐに取り込んだ（テストで確かめられ、元に戻すのも簡単なため）。数値（10 秒以内に 3 回、2 分、15 秒など）は内部の定数。</li>
+      <li>確かめるために、授業の窓を 150 秒と 300 秒、手元に記録した。確認の後に消した。リポジトリには入れていない。</li>
+      <li>記録の一覧は、保存先のフォルダ（今の設定と、前に使った保存先）から読む。データベースは使わない。</li>
+      <li>一覧は新しい順。小さな画像は初めて表示するときに作り、アプリのキャッシュに置く。</li>
+      <li>履歴の窓は 1100 × 720（最小 760 × 520）。検索は打つたびに絞り込む。</li>
+      <li>メニューに「履歴…」を足す。パネルの右上にも履歴を開くボタンを足す。</li>
     </ol>
-  </section>
-
-  <section class="block" aria-labelledby="h-verify">
-    <h2 id="h-verify">確かめた範囲</h2>
-    <ul>
-      <li>試作（Python）で、F1〜F6 の 57 項目がすべて合格（<code>check_r2.py</code>）。mp4 から読んだ F1 も同じ結果（<code>mp4_check.py</code>）。</li>
-      <li>測っていない：Rust での実装（criteria と build で作る）、Windows（確認中）、実際の授業の画面、Mac の全画面表示の窓。</li>
-      <li>期待値は実行の前に決めました。ただし F4 の「戻り」の期待値は実行の後で直し、F3 の規則は実行の結果を見て足しました。この試作の合格は、決めた動きの確認であって、実際の授業での精度の保証ではありません。</li>
-    </ul>
   </section>
 
   <section class="block other" aria-labelledby="h-other">
@@ -640,6 +595,7 @@
   </footer>
 </main>
 
+
 <dialog class="zoom" id="zoom" aria-labelledby="zoom-cap">
   <div class="zoom-box">
     <img id="zoom-img" alt="">
@@ -655,8 +611,8 @@
 (function () {
   "use strict";
 
-  var DOC_PATH = "answers/round2";
-  var DRAFT_KEY = "zsp-decision-sheet-round2";
+  var DOC_PATH = "answers/round3";
+  var DRAFT_KEY = "zsp-decision-sheet-round3";
   var sections = Array.prototype.slice.call(document.querySelectorAll("section.q"));
   var main = document.querySelector("main");
   var progressEl = document.getElementById("progress");
@@ -914,7 +870,7 @@
           el.replaceChildren(pre);
         }
       }).catch(function () {
-        el.textContent = "読み込めませんでした。リポジトリの同じファイル（ブランチ intake/r2-spec）を見てください。";
+        el.textContent = "読み込めませんでした。リポジトリの同じファイル（ブランチ feat/library-proto の docs/impl/library.md）を見てください。";
       });
     });
     Array.prototype.forEach.call(document.querySelectorAll("[data-text]"), function (el) {
@@ -936,7 +892,7 @@
   }
 
   function plainText() {
-    var lines = ["ZoomSlidesPicker 判断シート（ラウンド 2）", ""];
+    var lines = ["ZoomSlidesPicker 判断シート（ラウンド 3）", ""];
     sections.forEach(function (sec) {
       var q = sec.getAttribute("data-q");
       var title = sec.querySelector(".q-title").textContent.replace(q, "").trim();
