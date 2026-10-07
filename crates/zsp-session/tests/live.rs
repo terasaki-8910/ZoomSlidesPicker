@@ -12,8 +12,8 @@ use std::time::{Duration, Instant};
 use chrono::Local;
 use zsp_output::{RegionRecord, SessionMeta, SessionWriter, Source, SourceKind, Trash};
 use zsp_session::{
-    Control, EngineHandle, FrameSource, Notice, RgbaImage, Session, SourceError, State, Status,
-    spawn,
+    Control, EngineHandle, FAILED_IN_A_ROW_BEFORE_LOST, FrameSource, Notice, RgbaImage, Session,
+    SourceError, State, Status, spawn,
 };
 
 struct NoopTrash;
@@ -180,6 +180,99 @@ fn lost_source_pauses_the_session_and_reports_it() {
 
     let seen = notices.lock().unwrap().clone();
     assert!(seen.contains(&Notice::WindowLost), "{seen:?}");
+}
+
+/// Fails `failures` times (or forever with `usize::MAX`), then returns frames.
+struct FlakySource {
+    calls: Arc<AtomicUsize>,
+    failures: usize,
+    frame: RgbaImage,
+}
+
+impl FrameSource for FlakySource {
+    fn next_frame(&mut self, t: f64) -> Result<Option<(f64, RgbaImage)>, SourceError> {
+        let n = self.calls.fetch_add(1, Ordering::SeqCst);
+        if n < self.failures {
+            Err(SourceError::Failed("fake capture failure".into()))
+        } else {
+            Ok(Some((t, self.frame.clone())))
+        }
+    }
+
+    fn is_live(&self) -> bool {
+        true
+    }
+}
+
+/// A capture that fails for a moment (a window being resized) does not end the session:
+/// it keeps running and takes frames again once the source recovers.
+#[test]
+fn a_few_failed_captures_do_not_end_the_session() {
+    let root = tempfile::tempdir().unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let source = FlakySource {
+        calls: calls.clone(),
+        failures: (FAILED_IN_A_ROW_BEFORE_LOST - 5) as usize,
+        frame: fake_frame(),
+    };
+    let notices: Arc<Mutex<Vec<Notice>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink = notices.clone();
+    let handle = spawn(
+        Box::new(source),
+        new_session(root.path()),
+        0.05,
+        Box::new(move |n, _| sink.lock().unwrap().push(n.clone())),
+    );
+    let failures = (FAILED_IN_A_ROW_BEFORE_LOST - 5) as usize;
+    let start = Instant::now();
+    while calls.load(Ordering::SeqCst) < failures + 5 && start.elapsed() < Duration::from_secs(5) {
+        thread::sleep(Duration::from_millis(10));
+    }
+    let st = handle.status();
+    assert_eq!(st.state, State::Running, "still running after the failures");
+    assert!(!st.window_lost);
+    handle.send(Control::Stop);
+    handle.join().unwrap();
+    let seen = notices.lock().unwrap().clone();
+    assert!(!seen.contains(&Notice::WindowLost), "{seen:?}");
+    assert_eq!(
+        seen.iter()
+            .filter(|n| matches!(n, Notice::Finished { .. }))
+            .count(),
+        1,
+        "finished once, by Stop: {seen:?}"
+    );
+}
+
+/// Captures that keep failing make the window count as lost (paused and reported), never a
+/// silent end of the session.
+#[test]
+fn failing_captures_count_as_a_lost_window() {
+    let root = tempfile::tempdir().unwrap();
+    let source = FlakySource {
+        calls: Arc::new(AtomicUsize::new(0)),
+        failures: usize::MAX,
+        frame: fake_frame(),
+    };
+    let notices: Arc<Mutex<Vec<Notice>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink = notices.clone();
+    let handle = spawn(
+        Box::new(source),
+        new_session(root.path()),
+        0.05,
+        Box::new(move |n, _| sink.lock().unwrap().push(n.clone())),
+    );
+    let st = wait_for_status(&handle, |s| s.window_lost, Duration::from_secs(5));
+    assert!(st.window_lost, "window_lost never became true");
+    assert_eq!(st.state, State::Paused);
+    let seen = notices.lock().unwrap().clone();
+    assert!(seen.contains(&Notice::WindowLost), "{seen:?}");
+    assert!(
+        !seen.iter().any(|n| matches!(n, Notice::Finished { .. })),
+        "not finished by failures: {seen:?}"
+    );
+    handle.send(Control::Stop);
+    handle.join().unwrap();
 }
 
 /// After a pause, frames resume at the normal cadence instead of catching up on the ticks
