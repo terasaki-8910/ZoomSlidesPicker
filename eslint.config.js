@@ -7,10 +7,20 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    // "target" is Cargo's build output for src-tauri (gitignored, but eslint's own
-    // glob still walks it) -- it embeds the frontend dist as a generated JS asset for
-    // tauri-codegen, which is binary-ish and not real source.
-    ignores: ["dist", "dist-mock", "node_modules", "playwright-report", "test-results", "target"],
+    // "target" (and "target-dmg", a second Cargo target dir for release builds) is Cargo's
+    // build output for src-tauri (gitignored, but eslint's own glob still walks it) -- it
+    // embeds the frontend dist as a generated JS asset for tauri-codegen, which is
+    // binary-ish and not real source.
+    ignores: [
+      "dist",
+      "dist-mock",
+      "node_modules",
+      "playwright-report",
+      "test-results",
+      "target",
+      "target-dmg",
+      ".worktrees",
+    ],
   },
   {
     files: ["src/**/*.{ts,tsx}"],

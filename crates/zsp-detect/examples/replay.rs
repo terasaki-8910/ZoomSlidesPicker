@@ -25,7 +25,7 @@ fn main() {
 
     let index = fs::read_to_string(dir.join("index.tsv")).expect("index.tsv");
     let mut detector = Detector::new(Config::default());
-    let (mut saves, mut revisits, mut last_t) = (0usize, 0usize, 0.0);
+    let (mut saves, mut replaces, mut revisits, mut last_t) = (0usize, 0usize, 0usize, 0.0);
 
     for line in index.lines() {
         let mut parts = line.split('\t');
@@ -53,6 +53,12 @@ fn main() {
                     saves += 1;
                     println!("{t:8.2}  save #{index}  content {t_content:.2}");
                 }
+                Event::Replace {
+                    index, t_content, ..
+                } => {
+                    replaces += 1;
+                    println!("{t:8.2}  replace #{index}  content {t_content:.2}");
+                }
                 Event::Revisit { t_content, matches } => {
                     revisits += 1;
                     println!("{t:8.2}  revisit of #{matches}  content {t_content:.2}");
@@ -66,10 +72,17 @@ fn main() {
         last_t = t;
     }
     for ev in detector.finish(last_t) {
-        if let Event::Save { index, .. } = ev {
-            saves += 1;
-            println!("{last_t:8.2}  save #{index}  (end)");
+        match ev {
+            Event::Save { index, .. } => {
+                saves += 1;
+                println!("{last_t:8.2}  save #{index}  (end)");
+            }
+            Event::Replace { index, .. } => {
+                replaces += 1;
+                println!("{last_t:8.2}  replace #{index}  (end)");
+            }
+            _ => {}
         }
     }
-    println!("saves {saves}, revisits {revisits}, frames to {last_t:.1} s");
+    println!("saves {saves}, replaces {replaces}, revisits {revisits}, frames to {last_t:.1} s");
 }

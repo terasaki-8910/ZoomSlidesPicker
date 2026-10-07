@@ -68,7 +68,7 @@
 | `src-tauri` | 常駐アイコン、窓、ショートカット、通知、設定、コマンド |
 | `src` | 画面（React）。Rust とのやり取りは [docs/impl/ipc.md](docs/impl/ipc.md) |
 | `fixtures` | テスト用の合成の授業画面（`samples/fixture/` で生成） |
-| `spike` | キャプチャの検証用（Windows の確認手順は `spike/WINDOWS-CHECK.md`） |
+| `spike` | キャプチャの検証用（ラウンド 1）。Windows での確認手順は `docs/WINDOWS-CHECK.md` |
 
 コマンド:
 
@@ -78,6 +78,8 @@ sh scripts/check.sh          # すべての検査（Rust のテスト・fmt・cl
 pnpm tauri dev               # 開発用に起動
 pnpm tauri build             # 配布物（macOS は .app と .dmg）
 ```
+
+Windows 用のインストーラーは Mac でも作れる（手順は `docs/WINDOWS-CHECK.md` の最後）。
 
 テスト用の環境変数（受け入れの確認用。普段は使わない）:
 
@@ -93,6 +95,15 @@ pnpm tauri build             # 配布物（macOS は .app と .dmg）
 ```sh
 cargo run --release -p zsp-detect --example replay -- <記録のフォルダ> <x> <y> <w> <h>
 cargo run -p zsp-detect --example trace_fixture -- F7   # fixture での判定の出来事
+```
+
+記録中のセッションの窓を 1 秒ごとに縮小画像で残し、保存と突き合わせる（画像そのものは残さない）。縮小画像は fixture と同じ形に直して、判定に通し直せる（`ZSP_CFG=live_min_cells=6` のように数値を差し替えられる）:
+
+```sh
+.venv/bin/python samples/verify/record_grids.py <窓の ID> <セッションのフォルダ> grids.npz
+.venv/bin/python samples/verify/verify_session.py <セッションのフォルダ> grids.npz
+.venv/bin/python samples/verify/grids_to_fixture.py grids.npz <作業用のフォルダ>
+cargo run --release -p zsp-detect --example trace_fixture -- <作業用のフォルダ>
 ```
 
 fixture の作り直し（`samples/fixture/fixture.py` を変えたときだけ。`F7` のように番号を付けると、その fixture だけ）:

@@ -19,6 +19,7 @@ export default defineConfig({
     mockReset: true,
     // tests/ui/*.spec.ts are Playwright specs (run via scripts/ui-check.sh), not vitest's
     // -- exclude them, since vitest's default include glob also matches "*.spec.ts".
-    exclude: [...configDefaults.exclude, "dist-mock/**", "tests/ui/**"],
+    // .worktrees/ holds other branches' checkouts (CLAUDE.md > Workflow): their own runs.
+    exclude: [...configDefaults.exclude, "dist-mock/**", "tests/ui/**", ".worktrees/**"],
   },
 });

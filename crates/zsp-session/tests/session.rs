@@ -70,6 +70,20 @@ fn new_session(root: &Path) -> Session {
     )
 }
 
+/// Slide A with its first `n` bars only (a build, R3-2).
+fn build(n: u32) -> RgbaImage {
+    RgbaImage::from_fn(W, H, |x, y| {
+        let row = y / 30;
+        let bar = (20..140).contains(&x) && (y % 30) < 8 && y > 20 && row <= n;
+        let title = (20..200).contains(&x) && (4..14).contains(&y);
+        if bar || title {
+            image::Rgba([25, 25, 30, 255])
+        } else {
+            image::Rgba([250, 250, 250, 255])
+        }
+    })
+}
+
 /// Feed `img` every 0.5 s for t in [from, to); collect notices.
 fn feed(s: &mut Session, img: &RgbaImage, from: f64, to: f64, out: &mut Vec<Notice>) {
     let mut t = from;
@@ -342,4 +356,45 @@ fn undo_after_finish_does_nothing() {
     assert!(s.control(9.0, Control::Undo).unwrap().is_empty());
     assert!(saves[0].1.exists(), "the capture stays in place");
     assert_eq!(s.status().count, 1);
+}
+
+/// R3-2: a step added long after the save replaces the saved image: same index, the old
+/// file in the trash, the new frame on disk, the count unchanged.
+#[test]
+fn a_later_build_step_replaces_the_saved_image() {
+    let root = tempfile::tempdir().unwrap();
+    let mut s = new_session(root.path());
+    let mut out = Vec::new();
+    feed(&mut s, &build(1), 0.0, 20.0, &mut out);
+    let first = saved(&out);
+    assert_eq!(first.len(), 1);
+    let old = first[0].1.clone();
+
+    feed(&mut s, &build(2), 20.0, 40.0, &mut out);
+    let replaced: Vec<(usize, PathBuf)> = out
+        .iter()
+        .filter_map(|n| match n {
+            Notice::Replaced { index, path } => Some((*index, path.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(replaced.len(), 1, "notices: {out:?}");
+    assert_eq!(replaced[0].0, 1);
+    assert_eq!(saved(&out).len(), 1, "no new capture");
+    assert!(!old.exists());
+    assert!(
+        root.path()
+            .join("trash")
+            .join(old.file_name().unwrap())
+            .exists()
+    );
+    assert_eq!(png_rgb(&replaced[0].1), rgb(&build(2)));
+    assert_eq!(s.status().count, 1);
+    assert_eq!(s.status().last_capture.as_ref(), Some(&replaced[0].1));
+
+    let dir = s.status().dir;
+    s.finish(40.0, Local::now()).unwrap();
+    let json = session_json(&dir);
+    assert_eq!(json["captures"].as_array().unwrap().len(), 1);
+    assert_eq!(json["pdf"]["pages"], 1);
 }

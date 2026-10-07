@@ -68,7 +68,9 @@ pub fn load_strip(id: &str) -> Strip {
 }
 
 pub struct Expected {
+    /// The captures at the end (after replacements), in index order.
     pub saves: Vec<(String, f64, f64)>,
+    pub replaces: usize,
     pub quiet: Vec<(String, f64, f64)>,
     pub revisits: usize,
     pub blanks: usize,
@@ -94,6 +96,9 @@ pub fn expected(id: &str) -> Expected {
     };
     Expected {
         saves: windows("saves"),
+        replaces: e
+            .get("replaces")
+            .map_or(0, |v| v.as_u64().unwrap() as usize),
         quiet: windows("quiet"),
         revisits: e["revisits"].as_u64().unwrap() as usize,
         blanks: e["blanks"].as_u64().unwrap() as usize,
@@ -119,6 +124,7 @@ pub struct SaveRec {
 #[derive(Debug, Default)]
 pub struct Run {
     pub saves: Vec<SaveRec>,
+    pub replaces: Vec<SaveRec>,
     pub revisits: Vec<f64>,
     pub blanks: Vec<f64>,
 }
@@ -151,6 +157,30 @@ pub fn collect(events: Vec<Event>, held: &mut Option<f64>, run: &mut Run) {
                     reason,
                 });
             }
+            Event::Replace {
+                index,
+                t_content,
+                t_save,
+                held_t,
+                reason,
+            } => {
+                assert_eq!(
+                    Some(held_t),
+                    *held,
+                    "Replace at {t_save} must write the last held frame"
+                );
+                assert!(
+                    run.saves.iter().any(|s| s.index == index),
+                    "Replace of capture {index}, which was never saved"
+                );
+                run.replaces.push(SaveRec {
+                    index,
+                    t_content,
+                    t_save,
+                    held_t,
+                    reason,
+                });
+            }
             Event::Revisit { t_content, .. } => run.revisits.push(t_content),
             Event::Blank { t } => run.blanks.push(t),
         }
@@ -168,4 +198,16 @@ pub fn run_strip(strip: &Strip) -> Run {
     let events = det.finish(*strip.times.last().unwrap());
     collect(events, &mut held, &mut run);
     run
+}
+
+impl Run {
+    /// The captures at the end: each save, or its latest replacement, in index order.
+    pub fn captures(&self) -> Vec<SaveRec> {
+        let mut out = self.saves.clone();
+        for r in &self.replaces {
+            let slot = out.iter_mut().find(|s| s.index == r.index).unwrap();
+            *slot = r.clone();
+        }
+        out
+    }
 }

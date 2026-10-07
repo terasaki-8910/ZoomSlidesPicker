@@ -76,6 +76,7 @@ fn on_notice<R: Runtime>(app: &AppHandle<R>, notice: &Notice, status: &Status) {
             &i18n::notify_stop_body(lang, *count),
         ),
         Notice::Saved { .. }
+        | Notice::Replaced { .. }
         | Notice::Undone { .. }
         | Notice::Paused
         | Notice::Resumed
