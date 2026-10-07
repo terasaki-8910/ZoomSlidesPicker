@@ -95,7 +95,8 @@ After these, `pnpm lint`, `pnpm test`, and `sh scripts/ui-check.sh` must still p
 When the environment variable `ZSP_AUTOSTART_TITLE` is set, the app starts a session at launch
 on the first window whose title contains it (whole window). With `ZSP_AUTOSTART_SECONDS=n`
 it stops after n seconds and quits. `ZSP_SAVE_ROOT=<dir>` overrides the save root (so tests
-never write into the user's Pictures folder). `ZSP_OPEN_WINDOW=panel|settings|region` opens
+never write into the user's Pictures folder; applied at startup even without the other
+hooks). `ZSP_OPEN_WINDOW=panel|settings|region|library` opens
 that window at launch (`region` takes the `ZSP_AUTOSTART_TITLE` window and starts no
 session), since the tray icon cannot be clicked from a script. Nothing else changes;
 document these in README.md under development notes.

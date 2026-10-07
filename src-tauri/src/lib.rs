@@ -47,7 +47,12 @@ pub fn run() {
                 app.handle()
                     .set_activation_policy(tauri::ActivationPolicy::Accessory)?;
 
-                let (settings, known_roots) = settings::load(app.handle());
+                let (mut settings, known_roots) = settings::load(app.handle());
+                // Test hook: a save root for this run only, never written to the settings
+                // (docs/impl/shell.md > Test hook).
+                if let Ok(root) = env::var("ZSP_SAVE_ROOT") {
+                    settings.save_root = root;
+                }
                 let app_version = app.package_info().version.to_string();
                 app.manage(
                     Mutex::new(Shell::new(app_version, settings, known_roots)) as SharedShell
