@@ -1,4 +1,4 @@
-//! ACCEPTANCE A1-A10 and A15: the detector on the committed fixtures F1-F7.
+//! ACCEPTANCE A1-A10 and A15: the detector on the committed fixtures F1-F9.
 
 mod common;
 
@@ -75,6 +75,14 @@ fn a15_f7_camera_tile() {
 #[test]
 fn a15_f8_laser_then_build() {
     check_fixture("F8");
+}
+
+/// A15: a recorded lecture played in a browser with the whole player selected: the
+/// speaker's camera is small in a corner and mostly flickers; the player's controls show for
+/// a moment at play and on a mouse move. One save per slide, none for the controls.
+#[test]
+fn a15_f9_small_camera_and_player_controls() {
+    check_fixture("F9");
 }
 
 /// A1-A3: lecture at normal speed (7 saves, none while the video plays, one revisit).

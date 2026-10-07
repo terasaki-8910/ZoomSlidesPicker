@@ -15,10 +15,20 @@ fn main() {
         match cap.capture() {
             Ok(img) => {
                 if n % 20 == 0 {
-                    println!("{:6.1}s ok {}x{} in {} ms", start.elapsed().as_secs_f64(), img.width(), img.height(), t0.elapsed().as_millis());
+                    println!(
+                        "{:6.1}s ok {}x{} in {} ms",
+                        start.elapsed().as_secs_f64(),
+                        img.width(),
+                        img.height(),
+                        t0.elapsed().as_millis()
+                    );
                 }
             }
-            Err(e) => println!("{:6.1}s ERR {e} (after {} ms)", start.elapsed().as_secs_f64(), t0.elapsed().as_millis()),
+            Err(e) => println!(
+                "{:6.1}s ERR {e} (after {} ms)",
+                start.elapsed().as_secs_f64(),
+                t0.elapsed().as_millis()
+            ),
         }
         n += 1;
         std::thread::sleep(Duration::from_millis(500));
