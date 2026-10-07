@@ -1,6 +1,10 @@
 //! Window creation (docs/impl/ipc.md > Windows). Each window is created when opened and
 //! destroyed when closed -- there is no window at launch (SPEC.md > 画面と操作).
 
+use std::sync::{LazyLock, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+
 use tauri::{AppHandle, LogicalSize, Manager, Runtime, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_positioner::{Position, WindowExt};
 
@@ -16,6 +20,32 @@ const PANEL_WIDTH: f64 = 320.0;
 const PANEL_DEFAULT_HEIGHT: f64 = 480.0;
 const PANEL_MIN_HEIGHT: f64 = 160.0;
 const PANEL_MAX_HEIGHT: f64 = 640.0;
+
+/// The panel is shown once its page has rendered (its first `fit_panel`, so there is no
+/// white flash), or after this long if that never comes.
+const PANEL_SHOW_FALLBACK: Duration = Duration::from_millis(1500);
+/// Windows: right after the panel is shown, the tray click and the tray menu hand focus
+/// back to the shell, and the webview takes it while it starts. A blur this soon is that,
+/// not the user leaving the panel, so the panel takes focus again instead of closing.
+const PANEL_BLUR_GRACE: Duration = Duration::from_millis(800);
+
+/// When the panel was last shown.
+static PANEL_SHOWN_AT: LazyLock<Mutex<Option<Instant>>> = LazyLock::new(|| Mutex::new(None));
+
+fn show_panel<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+    *PANEL_SHOWN_AT.lock().unwrap() = Some(Instant::now());
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+/// Whether a blur of the panel now is one to ride out (see `PANEL_BLUR_GRACE`).
+fn in_blur_grace() -> bool {
+    cfg!(windows)
+        && PANEL_SHOWN_AT
+            .lock()
+            .unwrap()
+            .is_some_and(|at| at.elapsed() < PANEL_BLUR_GRACE)
+}
 
 fn effective_lang<R: Runtime>(app: &AppHandle<R>) -> Lang {
     let shell = app.state::<SharedShell>();
@@ -35,10 +65,10 @@ pub fn toggle_panel<R: Runtime>(app: &AppHandle<R>) {
 
 /// Opens the panel, creating it if needed: no decorations, always on top, not in the
 /// taskbar, not resizable, width 320, placed at the tray icon, closes on blur
-/// (docs/impl/ipc.md > Windows).
+/// (docs/impl/ipc.md > Windows). It is shown once its page has rendered.
 pub fn open_panel<R: Runtime>(app: &AppHandle<R>) {
     if let Some(w) = app.get_webview_window(PANEL_LABEL) {
-        let _ = w.set_focus();
+        show_panel(&w);
         return;
     }
     let Ok(window) = WebviewWindowBuilder::new(
@@ -66,13 +96,23 @@ pub fn open_panel<R: Runtime>(app: &AppHandle<R>) {
     {
         let _ = window.center();
     }
-    let _ = window.show();
-    let _ = window.set_focus();
+    // Shown by the first fit_panel; this covers a page that never reports.
+    let fallback = window.clone();
+    thread::spawn(move || {
+        thread::sleep(PANEL_SHOW_FALLBACK);
+        if matches!(fallback.is_visible(), Ok(false)) {
+            show_panel(&fallback);
+        }
+    });
 
     let closing = window.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::Focused(false) = event {
-            let _ = closing.close();
+            if in_blur_grace() {
+                let _ = closing.set_focus();
+            } else {
+                let _ = closing.close();
+            }
         }
     });
 }
@@ -147,6 +187,10 @@ pub fn fit_panel<R: Runtime>(window: &tauri::WebviewWindow<R>, height: f64) {
     let _ = window.set_size(LogicalSize::new(PANEL_WIDTH, clamped));
     // Keeps it at the tray icon; with no known tray position it stays where it is.
     let _ = window.move_window_constrained(Position::TrayCenter);
+    // The first report means the page has rendered: show the panel now.
+    if matches!(window.is_visible(), Ok(false)) {
+        show_panel(window);
+    }
 }
 
 /// Sets every native (outside-webview) window title to the effective language

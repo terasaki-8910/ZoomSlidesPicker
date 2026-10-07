@@ -2,8 +2,8 @@
 //! windows (docs/impl/shell.md > Test hook). No-ops unless the variables are set.
 //!
 //! - `ZSP_AUTOSTART_TITLE=<substr>`: starts a session on the first window whose title
-//!   contains it (whole window). With `ZSP_OPEN_WINDOW=region`, opens the region window
-//!   for that window instead.
+//!   contains it (whole window, or `ZSP_AUTOSTART_REGION=x,y,w,h` as fractions of it).
+//!   With `ZSP_OPEN_WINDOW=region`, opens the region window for that window instead.
 //! - `ZSP_AUTOSTART_SECONDS=<n>`: quits after n seconds (stopping the session first).
 //! - `ZSP_SAVE_ROOT=<dir>`: the save root for this run only (not written to the settings).
 //! - `ZSP_OPEN_WINDOW=panel|settings|region`: opens that window at launch.
@@ -53,14 +53,17 @@ fn run(app: &AppHandle, title: Option<&str>, open: Option<&str>) {
                 eprintln!("ZSP_OPEN_WINDOW=region: {e}");
             }
         } else {
-            // Whole window, per docs/impl/shell.md > Test hook.
-            let full = RegionSel {
-                x: 0.0,
-                y: 0.0,
-                w: 1.0,
-                h: 1.0,
-            };
-            if let Err(e) = crate::session_start::start(app, window_id, full) {
+            // Whole window, per docs/impl/shell.md > Test hook, unless a region is given.
+            let region = env::var("ZSP_AUTOSTART_REGION")
+                .ok()
+                .and_then(|s| parse_region(&s))
+                .unwrap_or(RegionSel {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 1.0,
+                    h: 1.0,
+                });
+            if let Err(e) = crate::session_start::start(app, window_id, region) {
                 eprintln!("ZSP_AUTOSTART_TITLE: failed to start a session: {e}");
                 return;
             }
@@ -82,6 +85,18 @@ fn run(app: &AppHandle, title: Option<&str>, open: Option<&str>) {
             thread::sleep(Duration::from_secs(seconds));
             app.exit(0);
         });
+    }
+}
+
+/// `x,y,w,h` as fractions of the window.
+fn parse_region(s: &str) -> Option<RegionSel> {
+    let v: Vec<f64> = s
+        .split(',')
+        .map(|p| p.trim().parse().ok())
+        .collect::<Option<_>>()?;
+    match v[..] {
+        [x, y, w, h] => Some(RegionSel { x, y, w, h }),
+        _ => None,
     }
 }
 
