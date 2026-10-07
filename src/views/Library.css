@@ -45,7 +45,27 @@
   font-size: var(--font-size-sm);
 }
 
-/* Layout A: list + detail side by side. */
+.library-permission-notice {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.library-permission-notice .notice {
+  flex: 1 1 auto;
+}
+
+.library-permission-actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-sm);
+}
+
+/* List + detail side by side (docs/impl/library.md > Layout: "layout A only"). */
 .library-body {
   display: flex;
   flex: 1 1 auto;
@@ -73,12 +93,6 @@
 .library-search-wrap {
   flex: none;
   padding: var(--space-sm);
-}
-
-.library-search-wrap-wide {
-  width: 100%;
-  max-width: 640px;
-  padding: 0;
 }
 
 .library-search {
@@ -128,7 +142,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-bg-elevated);
-  object-fit: cover;
+  /* The whole capture, letterboxed: regions have any aspect ratio. */
+  object-fit: contain;
 }
 
 .library-row-main {
@@ -171,16 +186,11 @@
   background: var(--color-bg-elevated);
 }
 
-/* Shared by layout A's right pane and layout B's opened view. */
 .library-detail-pane {
   flex: 1 1 auto;
   min-width: 0;
   overflow-y: auto;
   padding: var(--space-xl);
-}
-
-.library-back-btn {
-  margin-bottom: var(--space-md);
 }
 
 .library-detail-content {
@@ -193,6 +203,9 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  /* Fixed height whether showing the static heading or the rename input, so switching
+     between them does not nudge the meta line below (ui.md: fixed-position row controls). */
+  min-height: 32px;
 }
 
 .library-detail-title {
@@ -204,7 +217,53 @@
   white-space: nowrap;
 }
 
+.library-rename-input {
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+}
+
 .library-detail-meta {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.library-memo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.library-memo-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.library-memo-field {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding: var(--space-sm);
+  font-size: var(--font-size-sm);
+}
+
+.library-memo-saved {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.library-recording-note {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
@@ -222,9 +281,9 @@
   margin-left: auto;
 }
 
-/* A danger-styled secondary button, layered on Button's own classes via tokens only --
-   see the comment on .library-icon-btn-danger below for why this is a modifier here
-   rather than a new Button `kind`. */
+/* A danger-styled secondary button (the action row's 削除…), layered on Button's own
+   classes via tokens only -- a CSS modifier here rather than a new Button `kind`, since
+   it is the only secondary button in the app that needs this treatment. */
 .library-btn-danger.library-btn-danger {
   border-color: var(--color-danger);
   color: var(--color-danger);
@@ -235,9 +294,35 @@
   border-color: var(--color-danger);
 }
 
+/* A solid danger *primary* button for the two confirm dialogs' "ごみ箱に移す" --
+   `--color-on-accent` is reused rather than inventing a new token: in both themes it is
+   "white in light mode, near-black in dark mode", which is exactly the text colour that
+   also reads at AA contrast on the danger background (verified: ~6.6:1 light, ~6.7:1 dark). */
+.library-btn-confirm-danger.library-btn-confirm-danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: var(--color-on-accent);
+}
+
+.library-btn-confirm-danger.library-btn-confirm-danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.library-confirm-message {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.library-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
 .library-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: var(--space-md);
 }
 
@@ -248,13 +333,26 @@
   gap: var(--space-xs);
 }
 
+/* Resets a <button> back to the plain tile look (docs/impl/library.md > Layout: "a
+   tile is a button") -- not selected via :disabled since the tile is never disabled. */
+.library-tile-button {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
 .library-tile-img {
   width: 100%;
   aspect-ratio: 16 / 9;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-bg-elevated);
-  object-fit: cover;
+  /* The whole capture, letterboxed: regions have any aspect ratio. */
+  object-fit: contain;
 }
 
 .library-tile-caption {
@@ -262,13 +360,27 @@
   font-size: var(--font-size-xs);
 }
 
+.library-tile-selectable {
+  cursor: pointer;
+}
+
+.library-tile-caption-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
 .library-tile-check {
-  position: absolute;
-  top: var(--space-xs);
-  left: var(--space-xs);
-  z-index: 1;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+/* A chosen image is outlined in the accent colour, so the choice shows on the image too. */
+.library-tile-selectable:has(.library-tile-check:checked) .library-tile-img {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .library-empty-state {
@@ -281,94 +393,4 @@
   padding: var(--space-xl);
   color: var(--color-text-secondary);
   text-align: center;
-}
-
-/* Layout B: one list, centred rows. */
-.library-body-list {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-md);
-  overflow-y: auto;
-  padding: var(--space-lg);
-}
-
-.library-row-wide {
-  display: flex;
-  width: 100%;
-  max-width: 960px;
-  align-items: flex-start;
-  gap: var(--space-md);
-  padding: var(--space-sm) 0;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.library-row-wide-thumb {
-  flex: none;
-  width: 96px;
-  height: 54px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-elevated);
-  object-fit: cover;
-}
-
-.library-row-wide-main {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.library-row-wide-title {
-  overflow: hidden;
-  margin: 0;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.library-row-wide-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs);
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-}
-
-.library-row-wide-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.library-text-btn {
-  border: none;
-  background: transparent;
-  padding: var(--space-xs) var(--space-xs);
-  color: var(--color-accent);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-}
-
-.library-text-btn:hover {
-  text-decoration: underline;
-}
-
-/* A danger tint for the trash IconButton, layered via tokens only -- kept local to this
-   view (rather than a new IconButton prop) since it is the one icon button in the whole
-   app that needs it. */
-.library-icon-btn-danger.library-icon-btn-danger {
-  color: var(--color-danger);
-}
-
-.library-icon-btn-danger.library-icon-btn-danger:hover {
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
 }

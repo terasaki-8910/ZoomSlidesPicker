@@ -62,9 +62,9 @@ export const en: Record<keyof typeof ja, string> = {
   "settings.shortcut.pauseResume": "Pause and Resume",
   "settings.saved": "Saved.",
 
-  // Library (history) window prototype -- docs/impl/library.md > Wording, copied
-  // verbatim, plus two SPEC-QUESTION additions the table did not list (see ja.ts).
-  "library.search": "Search by title, date, or app",
+  // Library (history) window -- docs/impl/library.md > Strings, copied verbatim, plus
+  // library.slideCount (see ja.ts for why it is not in that table).
+  "library.search": "Search by title, date, app, or memo",
   "library.meta": "{date} · {duration} · {count} slides",
   "library.recording": "Recording",
   "library.noPdf": "No PDF",
@@ -79,11 +79,23 @@ export const en: Record<keyof typeof ja, string> = {
   "library.trashSelected": "Move {count} to Trash",
   "library.cancelSelect": "Done",
   "library.delete": "Delete…",
-  "library.open": "Open",
-  "library.folder": "Folder",
-  "library.empty": "No sessions yet. Start capturing a lecture window and it will appear here.",
+  "library.open": "History…",
+  "library.openButton": "History",
+  "library.memo": "Memo",
+  "library.memoPlaceholder": "Notes about the lecture, assignments, …",
+  "library.saved": "Saved",
+  "library.recordingLocked": "Stop recording to tidy up this session.",
+  "library.confirmDelete": "Move “{title}” to the Trash? The whole folder moves; you can restore it from the Trash.",
+  "library.confirmDeleteButton": "Move to Trash",
+  "library.confirmTrashImages": "Move {count} images to the Trash and rebuild the PDF?",
+  "library.dedupeSelected": "Selected {count} images that repeat a slide. Check them, then move them to the Trash.",
+  "library.dedupeNone": "No repeated slides found.",
+  "library.pickTitle": "Choose the lecture window",
+  "library.empty": "No sessions yet.",
+  "library.notFound": "Session not found.",
+  "library.noPdfError": "There is no PDF.",
+  "library.cancel": "Cancel",
   "library.noHits": "No matches.",
   "library.caption": "{index} · {time}",
   "library.slideCount": "{count} slides",
-  "library.pdf": "PDF",
 };

@@ -58,9 +58,9 @@ export const ja = {
   "settings.shortcut.pauseResume": "一時停止と再開",
   "settings.saved": "保存しました",
 
-  // Library (history) window prototype -- docs/impl/library.md > Wording, copied
-  // verbatim, plus two SPEC-QUESTION additions the table did not list (see en.ts).
-  "library.search": "題名・日付・アプリで検索",
+  // Library (history) window -- docs/impl/library.md > Strings, copied verbatim, plus
+  // library.slideCount (see en.ts for why it is not in that table).
+  "library.search": "題名・日付・アプリ・メモで検索",
   "library.meta": "{date} · {duration} · {count} 枚",
   "library.recording": "記録中",
   "library.noPdf": "PDF なし",
@@ -75,18 +75,27 @@ export const ja = {
   "library.trashSelected": "選んだ画像をごみ箱へ（{count} 枚）",
   "library.cancelSelect": "やめる",
   "library.delete": "削除…",
-  "library.open": "開く",
-  "library.folder": "フォルダ",
-  "library.empty": "まだ記録はありません。授業の窓を選んで開始すると、ここに並びます。",
+  "library.open": "履歴…",
+  "library.openButton": "履歴",
+  "library.memo": "メモ",
+  "library.memoPlaceholder": "授業の内容や課題など",
+  "library.saved": "保存しました",
+  "library.recordingLocked": "記録中のため、整理は停止してからできます。",
+  "library.confirmDelete": "「{title}」をごみ箱に移しますか？ フォルダごと移します。ごみ箱から戻せます。",
+  "library.confirmDeleteButton": "ごみ箱に移す",
+  "library.confirmTrashImages": "{count} 枚をごみ箱に移して、PDF を作り直しますか？",
+  "library.dedupeSelected": "同じスライドとみなした {count} 枚を選びました。確かめてから、ごみ箱に移してください。",
+  "library.dedupeNone": "同じスライドは見つかりませんでした。",
+  "library.pickTitle": "授業の窓を選ぶ",
+  "library.empty": "まだ記録はありません。",
+  "library.notFound": "記録が見つかりません。",
+  "library.noPdfError": "PDF がありません。",
+  "library.cancel": "やめる",
   "library.noHits": "見つかりませんでした。",
   "library.caption": "{index} · {time}",
-  // SPEC-QUESTION: not in the wording table. The detail pane's meta line needs the
+  // SPEC-QUESTION: not in the strings table. The detail pane's meta line needs the
   // "{count} 枚" fragment on its own (it has a 4th segment, PDF status, after it, so it
   // cannot reuse library.meta's fixed template) -- text taken verbatim from that
   // template's own tail, not newly invented wording.
   "library.slideCount": "{count} 枚",
-  // SPEC-QUESTION: not in the wording table. Layout B's row action is a bare "PDF" text
-  // button (shorter than the detail pane's "PDF を開く"), per the spec's own prose
-  // ("the actions as text buttons 開く, フォルダ, PDF"); taken verbatim from there.
-  "library.pdf": "PDF",
 } as const;

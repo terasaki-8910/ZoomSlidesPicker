@@ -6,9 +6,14 @@
 // All sample data below is invented for this mock -- window titles, thumbnails and the
 // snapshot image are generated SVGs with neutral shapes and placeholder labels, never
 // real screen content.
+// Leaf dictionaries only (no runtime imports of their own) -- see the comment above
+// libT() below for why this mock reuses them instead of duplicating their text.
+import { en } from "../i18n/en";
+import { ja } from "../i18n/ja";
 import { isMac } from "../lib/platform";
 import type {
   AppState,
+  CaptureView,
   Lang,
   LangSetting,
   PermissionView,
@@ -234,6 +239,7 @@ let lastSnapshotWindowId: number = SAMPLE_WINDOWS[0].id;
 
 const appStateListeners = new Set<(s: AppState) => void>();
 const settingsListeners = new Set<(s: SettingsView) => void>();
+const libraryChangedListeners = new Set<() => void>();
 
 function settingsView(): SettingsView {
   return { ...settings, effectiveLanguage: effectiveLanguageFor(settings.language) };
@@ -246,6 +252,23 @@ function emitAppState(): void {
 function emitSettings(): void {
   const view = settingsView();
   for (const listener of settingsListeners) listener(view);
+}
+
+function emitLibraryChanged(): void {
+  for (const listener of libraryChangedListeners) listener();
+}
+
+/**
+ * Error/status text the library commands below need that already has a home in
+ * src/i18n -- reused via the raw ja/en dictionaries (not the "../i18n" barrel, which
+ * pulls in useLang() and therefore ../ipc itself: importing that here would be a real
+ * module cycle). Keeps the Japanese/English wording in exactly one place rather than
+ * duplicating it as inline literals the way this file's other error strings
+ * (setSettings, rebuildPdf below) do, since these particular ones are already spelled
+ * out verbatim in docs/impl/library.md's own strings table.
+ */
+function libT(key: "library.notFound" | "library.noPdfError" | "library.recordingLocked"): string {
+  return effectiveLanguageFor(settings.language) === "ja" ? ja[key] : en[key];
 }
 
 function delay<T>(value: T, ms: number): Promise<T> {
@@ -420,14 +443,15 @@ export async function fitPanel(height: number): Promise<void> {
   document.documentElement.dataset.fitPanel = String(height);
 }
 
-// ---- Library (history) window: docs/impl/library.md > Data. Six invented sessions;
-// no real lecture content. Independent of the appState/session above -- the library
-// toolbar reuses that same mock state (see Library.tsx), but this list is its own,
-// separate piece of mock data, as docs/impl/library.md > Prototype scope describes.
+// ---- Library (history) window: docs/impl/library.md > Types/Commands. Six invented
+// sessions; no real lecture content. Independent of the appState/session above -- the
+// library toolbar reuses that same mock state (see Library.tsx), but this list is its
+// own, separate piece of mock data.
 
 interface SessionSeed {
-  id: string;
+  folder: string;
   customTitle: string | null;
+  memo: string;
   sourceApp: string | null;
   sourceTitle: string;
   sourceKind: "window" | "mp4";
@@ -443,10 +467,14 @@ interface SessionSeed {
 // on every run, not just whenever the suite happens to execute.
 const MOCK_NOW = "2026-10-07T15:00:00+09:00";
 
+// A plausible absolute save root for this mock's sessions (never a real user path).
+const MOCK_SAVE_ROOT = "/Users/lecturer/Pictures/ZoomSlidesPicker";
+
 const SESSION_SEEDS: SessionSeed[] = [
   {
-    id: "2026-10-07_1410",
+    folder: "2026-10-07_1410",
     customTitle: null,
+    memo: "",
     sourceApp: "Safari",
     sourceTitle: "第2回授業スライド.mp4",
     sourceKind: "window",
@@ -457,8 +485,9 @@ const SESSION_SEEDS: SessionSeed[] = [
     recording: true,
   },
   {
-    id: "2026-10-07_1242",
+    folder: "2026-10-07_1242",
     customTitle: null,
+    memo: "出席確認のあと、前回の復習から開始。レポートの締め切りを案内した。",
     sourceApp: "Safari",
     sourceTitle: "第1回授業スライド.mp4",
     sourceKind: "window",
@@ -473,8 +502,9 @@ const SESSION_SEEDS: SessionSeed[] = [
   // label. Read both as the same shape (a custom name over a generic "Zoom
   // ミーティング" source title) -- see this file's header comment and the report.
   {
-    id: "2026-10-03_1030",
+    folder: "2026-10-03_1030",
     customTitle: "デジタル人文学 第1回",
+    memo: "初回ガイダンス。参考文献リストを配布。",
     sourceApp: "zoom.us",
     sourceTitle: "Zoom ミーティング",
     sourceKind: "window",
@@ -485,8 +515,9 @@ const SESSION_SEEDS: SessionSeed[] = [
     recording: false,
   },
   {
-    id: "2026-10-02_1300",
+    folder: "2026-10-02_1300",
     customTitle: "統計学特論",
+    memo: "",
     sourceApp: "zoom.us",
     sourceTitle: "Zoom ミーティング",
     sourceKind: "window",
@@ -499,8 +530,9 @@ const SESSION_SEEDS: SessionSeed[] = [
   // SPEC-QUESTION: the spec gives a date but no time of day for this entry and the
   // next one; invented a plausible start/end (see the report).
   {
-    id: "2026-10-01_0900",
+    folder: "2026-10-01_0900",
     customTitle: null,
+    memo: "動画からの抽出。画質はやや低め。",
     sourceApp: null, // mp4 mode: no source app (types.ts)
     sourceTitle: "lecture_2026-10-01.mp4",
     sourceKind: "mp4",
@@ -511,8 +543,9 @@ const SESSION_SEEDS: SessionSeed[] = [
     recording: false,
   },
   {
-    id: "2026-09-30_1000",
+    folder: "2026-09-30_1000",
     customTitle: null,
+    memo: "",
     sourceApp: "Microsoft Edge",
     sourceTitle: "情報処理演習 - Microsoft Stream",
     sourceKind: "window",
@@ -534,8 +567,12 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+// path -> generated SVG data URL (docs/impl/library.md > Types: "the mock returns
+// generated SVG data URLs"), filled in as buildCaptures() below seeds each session.
+const THUMB_IMAGES = new Map<string, string>();
+
 /** Captures spaced evenly across the session, from t=0 to t=totalSeconds. */
-function buildCaptures(count: number, totalSeconds: number): SessionDetail["captures"] {
+function buildCaptures(dir: string, count: number, totalSeconds: number): CaptureView[] {
   return Array.from({ length: count }, (_, i) => {
     const index = i + 1;
     const tContent = count > 1 ? Math.round((i * totalSeconds) / (count - 1)) : 0;
@@ -544,21 +581,28 @@ function buildCaptures(count: number, totalSeconds: number): SessionDetail["capt
     const ss = tContent % 60;
     // ACCEPTANCE B2 / docs/session.schema.json's capture file pattern: NNN_hh-mm-ss.png.
     const file = `${String(index).padStart(3, "0")}_${pad2(hh)}-${pad2(mm)}-${pad2(ss)}.png`;
-    return { index, file, tContent, thumb: librarySlideSvg(index, `Slide ${index}`) };
+    const path = `${dir}/${file}`;
+    THUMB_IMAGES.set(path, librarySlideSvg(index, `Slide ${index}`));
+    return { index, file, path, tContent };
   });
 }
 
 interface SessionRecord {
   summary: SessionSummary;
-  captures: SessionDetail["captures"];
+  captures: CaptureView[];
 }
 
-const SESSION_RECORDS: SessionRecord[] = SESSION_SEEDS.map((seed) => {
-  const captures = seed.count > 0 ? buildCaptures(seed.count, seedDurationSeconds(seed)) : [];
+// Mutable (library commands below trash/rename/re-tag sessions and captures), unlike
+// the rest of this mock's seed-derived data.
+let sessionRecords: SessionRecord[] = SESSION_SEEDS.map((seed) => {
+  const dir = `${MOCK_SAVE_ROOT}/${seed.folder}`;
+  const captures = seed.count > 0 ? buildCaptures(dir, seed.count, seedDurationSeconds(seed)) : [];
   const summary: SessionSummary = {
-    id: seed.id,
+    dir,
+    folder: seed.folder,
     title: seed.customTitle ?? seed.sourceTitle,
     customTitle: seed.customTitle,
+    memo: seed.memo,
     sourceApp: seed.sourceApp,
     sourceTitle: seed.sourceTitle,
     sourceKind: seed.sourceKind,
@@ -567,21 +611,139 @@ const SESSION_RECORDS: SessionRecord[] = SESSION_SEEDS.map((seed) => {
     count: seed.count,
     hasPdf: seed.hasPdf,
     recording: seed.recording,
-    thumb: captures[0]?.thumb ?? null,
+    thumbPath: captures[0]?.path ?? null,
   };
   return { summary, captures };
 });
 
-export async function listSessions(): Promise<SessionSummary[]> {
-  return [...SESSION_RECORDS]
-    .sort((a, b) => new Date(b.summary.startedAt).getTime() - new Date(a.summary.startedAt).getTime())
-    .map((r) => r.summary);
+// fold_session's fixed, plausible result for this one sample session (docs/impl/
+// library.md > mock: "fold_session returns a fixed plausible list for one sample
+// session and [] for others") -- indices zsp_detect::fold_captures would not keep.
+const DEDUPE_DIR = `${MOCK_SAVE_ROOT}/2026-10-02_1300`;
+const DEDUPE_INDICES = [5, 6, 17, 18, 29];
+
+function findRecord(dir: string): SessionRecord | undefined {
+  return sessionRecords.find((r) => r.summary.dir === dir);
 }
 
-export async function getSession(id: string): Promise<SessionDetail> {
-  const record = SESSION_RECORDS.find((r) => r.summary.id === id);
-  if (!record) throw new Error(`unknown session: ${id}`);
-  return { ...record.summary, captures: record.captures };
+function notFoundError(): Error {
+  return new Error(libT("library.notFound"));
+}
+
+function noPdfError(): Error {
+  return new Error(libT("library.noPdfError"));
+}
+
+function recordingLockedError(): Error {
+  return new Error(libT("library.recordingLocked"));
+}
+
+export async function openLibrary(): Promise<void> {
+  // Nothing to open in a plain browser; the real command opens or focuses the window.
+}
+
+export async function listSessions(): Promise<SessionSummary[]> {
+  return [...sessionRecords]
+    .sort((a, b) => new Date(b.summary.startedAt).getTime() - new Date(a.summary.startedAt).getTime())
+    .map((r) => ({ ...r.summary }));
+}
+
+export async function getSession(dir: string): Promise<SessionDetail> {
+  const record = findRecord(dir);
+  if (!record) throw notFoundError();
+  return { ...record.summary, captures: record.captures.map((c) => ({ ...c })) };
+}
+
+export async function openSessionFolder(dir: string): Promise<void> {
+  if (!findRecord(dir)) throw notFoundError();
+  // Nothing to open in a plain browser; the real command opens the OS file manager.
+}
+
+export async function openSessionPdf(dir: string): Promise<void> {
+  const record = findRecord(dir);
+  if (!record) throw notFoundError();
+  if (!record.summary.hasPdf) throw noPdfError();
+  // Nothing to open in a plain browser; the real command opens slides.pdf.
+}
+
+export async function rebuildSessionPdf(dir: string): Promise<number> {
+  const record = findRecord(dir);
+  if (!record) throw notFoundError();
+  if (record.summary.recording) throw recordingLockedError();
+  // SPEC-QUESTION: docs/impl/library.md's table does not say this command errors on no
+  // images (unlike rebuild_pdf's panel/Settings equivalent) -- treated the same way for
+  // consistency, since both wrap the same zsp-output rebuild_pdf. See the report.
+  if (record.captures.length === 0) throw noPdfError();
+  record.summary.hasPdf = true;
+  emitLibraryChanged();
+  return record.captures.length;
+}
+
+export async function renameSession(dir: string, title: string | null): Promise<void> {
+  const record = findRecord(dir);
+  if (!record) throw notFoundError();
+  const trimmed = (title ?? "").trim();
+  record.summary.customTitle = trimmed === "" ? null : trimmed;
+  record.summary.title = record.summary.customTitle ?? record.summary.sourceTitle;
+  emitLibraryChanged();
+}
+
+export async function setSessionMemo(dir: string, memo: string): Promise<void> {
+  const record = findRecord(dir);
+  if (!record) throw notFoundError();
+  record.summary.memo = memo;
+  emitLibraryChanged();
+}
+
+export async function trashSession(dir: string): Promise<void> {
+  const record = findRecord(dir);
+  if (!record) throw notFoundError();
+  if (record.summary.recording) throw recordingLockedError();
+  sessionRecords = sessionRecords.filter((r) => r !== record);
+  if (appState.lastSession?.dir === dir) {
+    appState = { ...appState, lastSession: null };
+    emitAppState();
+  }
+  emitLibraryChanged();
+}
+
+export async function trashCaptures(dir: string, indices: number[]): Promise<number> {
+  const record = findRecord(dir);
+  if (!record) throw notFoundError();
+  if (record.summary.recording) throw recordingLockedError();
+  const toTrash = new Set(indices);
+  const before = record.captures.length;
+  record.captures = record.captures.filter((c) => !toTrash.has(c.index));
+  const moved = before - record.captures.length;
+  record.summary.count = record.captures.length;
+  record.summary.thumbPath = record.captures[0]?.path ?? null;
+  record.summary.hasPdf = record.summary.hasPdf && record.captures.length > 0;
+  emitLibraryChanged();
+  return moved;
+}
+
+export async function foldSession(dir: string): Promise<number[]> {
+  const record = findRecord(dir);
+  if (!record) throw notFoundError();
+  if (record.summary.recording) throw recordingLockedError();
+  return dir === DEDUPE_DIR ? [...DEDUPE_INDICES] : [];
+}
+
+export async function openCapture(path: string): Promise<void> {
+  if (!THUMB_IMAGES.has(path)) throw notFoundError();
+  // Nothing to open in a plain browser; the real command opens the OS default viewer.
+}
+
+export function thumbUrl(path: string, width: number): string {
+  void width; // the mock's generated SVGs are fixed-size, never actually resized
+  return THUMB_IMAGES.get(path) ?? librarySlideSvg(0, "?");
+}
+
+export async function onLibraryChanged(cb: () => void): Promise<UnlistenFn> {
+  libraryChangedListeners.add(cb);
+  return () => {
+    libraryChangedListeners.delete(cb);
+  };
 }
 
 export async function onAppState(cb: (state: AppState) => void): Promise<UnlistenFn> {
