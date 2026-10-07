@@ -97,6 +97,15 @@ cargo run --release -p zsp-detect --example replay -- <記録のフォルダ> <x
 cargo run -p zsp-detect --example trace_fixture -- F7   # fixture での判定の出来事
 ```
 
+記録中のセッションの窓を 1 秒ごとに縮小画像で残し、保存と突き合わせる（画像そのものは残さない）。縮小画像は fixture と同じ形に直して、判定に通し直せる（`ZSP_CFG=live_min_cells=6` のように数値を差し替えられる）:
+
+```sh
+.venv/bin/python samples/verify/record_grids.py <窓の ID> <セッションのフォルダ> grids.npz
+.venv/bin/python samples/verify/verify_session.py <セッションのフォルダ> grids.npz
+.venv/bin/python samples/verify/grids_to_fixture.py grids.npz <作業用のフォルダ>
+cargo run --release -p zsp-detect --example trace_fixture -- <作業用のフォルダ>
+```
+
 fixture の作り直し（`samples/fixture/fixture.py` を変えたときだけ。`F7` のように番号を付けると、その fixture だけ）:
 
 ```sh

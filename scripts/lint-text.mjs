@@ -34,7 +34,7 @@ function listFiles(dir) {
     return out; // directory does not exist (yet) -- nothing to check there
   }
   for (const entry of entries) {
-    if (entry.name === "node_modules" || entry.name === "target" || entry.name.startsWith(".")) continue;
+    if (["node_modules", "target", "target-dmg"].includes(entry.name) || entry.name.startsWith(".")) continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) out.push(...listFiles(full));
     else out.push(full);
