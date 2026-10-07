@@ -68,7 +68,7 @@
 | `src-tauri` | 常駐アイコン、窓、ショートカット、通知、設定、コマンド |
 | `src` | 画面（React）。Rust とのやり取りは [docs/impl/ipc.md](docs/impl/ipc.md) |
 | `fixtures` | テスト用の合成の授業画面（`samples/fixture/` で生成） |
-| `spike` | キャプチャの検証用（Windows の確認手順は `spike/WINDOWS-CHECK.md`） |
+| `spike` | キャプチャの検証用（ラウンド 1）。Windows での確認手順は `docs/WINDOWS-CHECK.md` |
 
 コマンド:
 
@@ -78,6 +78,8 @@ sh scripts/check.sh          # すべての検査（Rust のテスト・fmt・cl
 pnpm tauri dev               # 開発用に起動
 pnpm tauri build             # 配布物（macOS は .app と .dmg）
 ```
+
+Windows 用のインストーラーは Mac でも作れる（手順は `docs/WINDOWS-CHECK.md` の最後）。
 
 テスト用の環境変数（受け入れの確認用。普段は使わない）:
 
