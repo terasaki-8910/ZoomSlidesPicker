@@ -1,4 +1,4 @@
-//! ACCEPTANCE B2-B7 and B9: files, session.json, PDF, undo, rebuild.
+//! ACCEPTANCE B2-B7, B9 and B10: files, session.json, PDF, undo, rebuild, replace.
 
 use std::fs;
 use std::io;
@@ -315,6 +315,87 @@ fn b7_undo_moves_to_trash() {
     assert_eq!(w.undo_last(15.0, &trash).unwrap(), Some(p1.clone()));
     assert_eq!(w.undo_last(16.0, &trash).unwrap(), None);
     assert_eq!(w.capture_count(), 0);
+}
+
+/// B10 (R3-2): replacing a capture writes the new version under the same index (named by
+/// its own time), moves the old file to the trash, keeps the order, records a `replaced`
+/// event, and the PDF shows the new version.
+#[test]
+fn b10_replace_keeps_index_and_trashes_old_version() {
+    let root = tempfile::tempdir().unwrap();
+    let trash_dir = root.path().join("trash");
+    let trash = DirTrash(trash_dir.clone());
+    let mut w = SessionWriter::create(&root.path().join("out"), started(), meta()).unwrap();
+    let p1 = w
+        .save_capture(1, &pattern(8, 8, 1), 8, 8, 1.0, 5.0, CaptureReason::Settled)
+        .unwrap();
+    let p2 = w
+        .save_capture(
+            2,
+            &pattern(8, 8, 2),
+            8,
+            8,
+            9.0,
+            13.0,
+            CaptureReason::Settled,
+        )
+        .unwrap();
+
+    let new = pattern(10, 6, 3);
+    let p1b = w
+        .replace_capture(1, &new, 10, 6, 31.0, 35.0, CaptureReason::Settled, &trash)
+        .unwrap();
+    assert_eq!(p1b.file_name().unwrap(), "001_00-00-31.png");
+    assert!(!p1.exists(), "old version moved away");
+    assert!(trash_dir.join(p1.file_name().unwrap()).exists());
+    assert!(p2.exists());
+    let png = image::open(&p1b).unwrap().into_rgb8();
+    assert_eq!(png.dimensions(), (10, 6));
+    assert_eq!(png.into_raw(), rgb_of(&new));
+
+    let s = read_session(w.dir());
+    let caps = s["captures"].as_array().unwrap();
+    assert_eq!(caps.len(), 2);
+    assert_eq!(caps[0]["index"], 1);
+    assert_eq!(caps[0]["file"], "001_00-00-31.png");
+    assert_eq!(caps[0]["t_content"], 31.0);
+    assert_eq!(caps[0]["width"], 10);
+    assert_eq!(caps[1]["index"], 2);
+    let last = s["events"].as_array().unwrap().last().unwrap().clone();
+    assert_eq!(last["type"], "replaced");
+    assert_eq!(last["index"], 1);
+    assert_eq!(last["t"], 35.0);
+    assert_schema_valid(&s);
+
+    // Same second: the old file goes to the trash before the new one takes its name.
+    let p2b = w
+        .replace_capture(
+            2,
+            &pattern(8, 8, 4),
+            8,
+            8,
+            9.4,
+            40.0,
+            CaptureReason::End,
+            &trash,
+        )
+        .unwrap();
+    assert_eq!(p2b, p2);
+    assert!(trash_dir.join(p2.file_name().unwrap()).exists());
+    assert_eq!(
+        image::open(&p2b).unwrap().into_rgb8().into_raw(),
+        rgb_of(&pattern(8, 8, 4))
+    );
+
+    // Unknown index: an error, nothing changes.
+    assert!(
+        w.replace_capture(7, &new, 10, 6, 50.0, 51.0, CaptureReason::Settled, &trash)
+            .is_err()
+    );
+    assert_eq!(w.capture_count(), 2);
+
+    let pdf = w.finish(started()).unwrap().unwrap();
+    assert_eq!(pdf_page_sizes(&pdf), vec![(10.0, 6.0), (8.0, 8.0)]);
 }
 
 /// B9: rebuilding the PDF uses only the images still in the folder, in index order.

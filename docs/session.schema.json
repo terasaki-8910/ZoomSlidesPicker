@@ -82,7 +82,8 @@
         "required": ["t", "type"],
         "properties": {
           "t": { "type": "number", "minimum": 0 },
-          "type": { "enum": ["paused", "resumed", "blank", "window_lost", "window_back", "undo"] }
+          "type": { "enum": ["paused", "resumed", "blank", "window_lost", "window_back", "undo", "replaced"] },
+          "index": { "type": "integer", "minimum": 1, "description": "The capture replaced (type replaced only)." }
         }
       }
     },

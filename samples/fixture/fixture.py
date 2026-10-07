@@ -437,6 +437,27 @@ def render_f9(t):
     return img
 
 
+# F10: bullets added far apart (the lecturer talks before showing the next one), so each
+# step settles and is saved; R3-2 replaces the saved image with each new step. Then another
+# slide, a return to the finished slide, and a return to its first step (going back can
+# show a slide from its first build step again): both are revisits, not saves.
+F10_B_STEPS = [10.0, 30.0, 50.0]
+
+
+def render_f10(t):
+    if t < 10.0:
+        return _cached(("f10", "A"), lambda: _slide("Slide A 今日の内容", ["前回の復習"])[0])
+    if 70.0 <= t < 85.0:
+        return _cached(("f10", "C"), lambda: _slide("Slide C 次の話題", ["事例を見る", "考察"])[0])
+    if t >= 100.0:
+        n = 1
+    elif t >= 85.0:
+        n = 3
+    else:
+        n = sum(t >= s for s in F10_B_STEPS)
+    return _cached(("f10", "B", n), lambda: _slide("Slide B 三つの論点", ["第一の論点", "第二の論点", "第三の論点"][:n])[0])
+
+
 # ---------------------------------------------------------------------------
 # Registry and expectations for the chosen behaviour (DECISIONS.md, round 1):
 # moving regions masked while they move and compared again once still (R1-5 b),
@@ -455,9 +476,11 @@ FIXTURES = {
             ("スライド 3（動画の前）", 20.5, 21.5),
             ("スライド 3（動画が止まった後）", 41.4, 45.0),
             ("スライド 4（3.3 秒だけ表示）", 61.0, 62.5),
-            ("スライド 5（箇条書き 2 つ、Web カメラあり）", 69.5, 71.0),
-            ("スライド 5（ペンの書き込み）", 79.0, 80.5),
+            # Saved at [69.5, 71.0] with two bullets, then replaced by the version with the
+            # pen annotation (R3-2: it only adds).
+            ("スライド 5（箇条書き 2 つとペンの書き込み）", 79.0, 80.5),
         ],
+        "replaces": 1,
         "revisits": 1,
         "blanks": 0,
         "quiet": [("動画の再生中", T["video_on"], T["video_off"])],
@@ -573,5 +596,21 @@ FIXTURES = {
         ],
         # The saved frame of slide 3 must show the last bullet (added at 48.0).
         "sharp_from": [0.0, 22.0, 48.0, 58.0, 80.0, 105.0, 125.0],
+    },
+    "F10": {
+        "label": "間を空けて足される箇条書き（115 秒）",
+        "render": render_f10,
+        "end": 115.0,
+        "saves": [
+            ("スライド A", 0.5, 2.0),
+            ("スライド B（3 つ目まで足した最終状態。2 回置き換え）", 50.5, 52.0),
+            ("スライド C", 70.5, 72.0),
+        ],
+        "replaces": 2,
+        "revisits": 2,
+        "blanks": 0,
+        "quiet": [("C の後（B に戻る、B の最初の段階に戻る）", 72.0, 115.0)],
+        # The final image of B shows all three bullets.
+        "sharp_from": [0.0, 50.0, 70.0],
     },
 }
