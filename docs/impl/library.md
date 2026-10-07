@@ -1,179 +1,226 @@
-# History window (draft for the round 3 sheet)
+# History window ("library") implementation spec
 
-The user's request (2026-10-07):
+The user's requests (2026-10-07):
 > 常駐のバーのアプリとは別にウィンドウで開くアプリでこれまでの履歴とかをvoice transcriptみたいに検索、フォルダを開くとかのものができるようにしてください。
 
-Status: draft. Only the prototype view (mock data, not wired to Rust) is built, on branch
-`feat/library-proto`, to show real screenshots on the sheet. Nothing here is decided until
-the round 3 answers are in DECISIONS.md.
+> アイデアとして常駐のバーからの開始だけでなくウィンドウからの開始もできるようにしてください。というのも、Macで上のバーが埋まっていることが多く、わざわざ探すのが大変だからです。
 
-## Prototype scope (what the prototype agent builds)
+Decided in round 3 (DECISIONS.md, 2026-10-07 ラウンド 3): R3-4 a (a "履歴" window in the same
+app; in the Dock and Cmd-Tab while open), R3-5 a (list and search on the left, the chosen
+session's slides on the right), R3-6 (search title, date, app, memo; not slide text), R3-7
+(open folder, open PDF, rebuild PDF, rename, session to the trash, chosen images to the
+trash, merge duplicate slides, memo; start and stop in the window's top bar), R3-8 a (opening
+the app opens this window), R3-9 (merge when checks pass, build the DMG).
 
-A React view `src/views/Library.tsx` at `index.html#/library`, running on the IPC mock
-(`VITE_IPC_MOCK=1`), with two layouts so the sheet can show both:
+The prototype on branch `feat/library-proto` (layout A and B, mock data) is the starting
+point for the UI. Layout B is dropped (R3-5 a).
 
-- Layout A (default): two panes.
-- Layout B (`#/library?layout=list` -- the query goes before the hash: `/?layout=list#/library`):
-  one list, like voice-transcript's history.
-
-No Rust. New IPC functions exist only in the mock and as typed wrappers (see "Data").
+This file is the contract for both sides. docs/impl/ipc.md stays the contract for everything
+else; the types and commands below are added to it when this lands.
 
 ## Window
 
-Normal window (title bar), label `library`, title `ZoomSlidesPicker`, 1100 x 720 by default,
-minimum 760 x 520, resizable. Body background `--color-bg`.
+- Label `library`, URL `index.html#/library`, title `ZoomSlidesPicker`, 1100 x 720, minimum
+  760 x 520, resizable, centered, normal decorations. One instance: opening it again focuses
+  it.
+- Opened by: the tray menu item 「履歴…」 / "History…" (new, first item), a history icon
+  button in the panel header (next to the gear), and the app itself:
+  - At launch, the library window opens (R3-8 a), unless a test hook variable is set
+    (`ZSP_AUTOSTART_TITLE`, `ZSP_OPEN_WINDOW`; README > development notes).
+  - macOS `RunEvent::Reopen` (Finder, Spotlight, Launchpad, Dock while running) opens or
+    focuses the library window (it used to open the panel centered).
+- macOS: while the library window exists, `ActivationPolicy::Regular` (Dock icon, Cmd-Tab);
+  when it is destroyed, back to `Accessory`. Set the policy before showing the window, then
+  focus it. Windows: a normal taskbar window.
+- Closing destroys it (like the other windows). Quitting the app is still only from the tray
+  menu (closing this window does not quit).
 
-### Toolbar (both layouts), full width, one row
+## Layout (layout A of the prototype)
 
+Top bar, full width, one row:
 - Left: `ZoomSlidesPicker` (font-size-md, weight 600).
-- Right: the current session state and its controls, same words as the panel:
-  - stopped: `停止中` + primary button `開始`
+- Right: the session state and controls, the same words as the panel:
+  - stopped: `停止中` + primary `開始`
   - running: `保存中：12 枚` + elapsed `0:18:20` (tabular-nums) + secondary `一時停止` +
     primary `停止`
-  - paused: `一時停止中：12 枚` + secondary `再開` + primary `停止`
-  - and an IconButton for settings (same as the panel header).
-- The mock's preset decides the state (reuse the panel presets: `stopped`, `running`).
+  - paused: `一時停止中：12 枚` + elapsed + secondary `再開` + primary `停止`
+  - then an IconButton `設定` (gear) -> `open_settings`.
+  - macOS without Screen Recording permission: `開始` is disabled and a short notice with
+    「システム設定を開く」 shows under the top bar (same strings as the panel).
+- `開始` opens the window picker as a modal dialog inside this window (the panel's picker,
+  moved to a shared component `src/components/WindowPicker.tsx` and used by both). Choosing a
+  window calls `begin_region` as from the panel; the region window opens, this window stays
+  open. The dialog closes with Escape, a backdrop click, or its close button (ui.md: light
+  dismiss).
 
-### Layout A: list and detail
+Left column (320 px, its own scroll): search field and the session list, as in the
+prototype. Search matches custom title, source title, source app, memo, and the date forms
+(`10/7`, `10月7日`, `2026-10-07`); space-separated terms, all must match, case-insensitive.
+Row: thumbnail of the first slide (64 x 36), title, meta line, badge (`記録中` or
+`PDF なし`). Keyboard as in the prototype (listbox; Up/Down, Home/End).
 
-- Left column, fixed 320 px, its own scroll:
-  - Search field at the top (type `search`, placeholder `題名・日付・アプリで検索`), with a
-    visually hidden label.
-  - The session list, newest first. Each row (a button-like listbox option):
-    - thumbnail of the first slide, 64 x 36, radius-sm, border
-    - title: the custom name if set, else the source title (window title or video file
-      name), one line with ellipsis, font-size-sm weight 600
-    - meta line, font-size-xs, text-secondary, tabular-nums:
-      `10月7日（水）12:42 · 33 分 · 36 枚`
-    - badges after the meta when they apply: `記録中` (accent text on a subtle background,
-      for the running session), `PDF なし` (text-secondary)
-  - Selected row: `--color-bg-elevated` background and an accent left border 3 px.
-  - Keyboard: the list is a listbox; Up/Down move the selection, Home/End jump.
-- Right pane, fills the rest, its own scroll, padding space-xl:
-  - Title (font-size-xl, weight 600) and an IconButton `名前を変更` next to it.
-  - Meta line: `Safari の「第1回授業スライド.mp4」 · 10月7日（水）12:42–13:15 · 36 枚 · PDF あり`
-  - Action row (secondary buttons, wrap): `フォルダを開く`, `PDF を開く`,
-    `PDF を作り直す`, `同じスライドをまとめる…`, `画像を選ぶ`; then, pushed right,
-    a danger-styled secondary button `削除…`.
-  - Grid of slide thumbnails: `repeat(auto-fill, minmax(200px, 1fr))`, gap space-md.
-    Each tile: the image (16:9, border, radius-sm) and a caption `001 · 0:03:12`
-    (font-size-xs, tabular-nums, text-secondary). In "select" mode each tile shows a
-    checkbox and the action row turns into `選んだ画像をごみ箱へ（3 枚）` + `やめる`.
-  - Empty states: no sessions at all -- `まだ記録はありません。授業の窓を選んで開始すると、ここに並びます。`
-    and a primary `開始`; search with no hits -- `見つかりませんでした。`
-- Narrow window (below 900 px wide): the left column stays 280 px, the grid columns shrink;
-  no horizontal page scroll at 760 px.
+Right pane (its own scroll):
+- Title (font-size-xl) + IconButton `名前を変更`. Rename edits in place: a text field with the
+  current title selected; Enter or blur saves, Escape cancels; an empty value goes back to the
+  source title.
+- Meta line as in the prototype.
+- Memo: a labelled multi-line text field `メモ` under the meta line (placeholder
+  `授業の内容や課題など`), saved 600 ms after typing stops and on blur. Shows `保存しました`
+  briefly (text-secondary) after a save.
+- Action row (secondary buttons, wrap): `フォルダを開く`, `PDF を開く` (only when there is a
+  PDF), `PDF を作り直す`, `同じスライドをまとめる…`, `画像を選ぶ`; then, pushed right,
+  `削除…` (danger-styled secondary).
+- Grid of slide thumbnails as in the prototype. A tile is a button: click or Enter opens the
+  image with the OS default viewer (`open_capture`). In select mode each tile is a checkbox
+  instead, and the action row turns into `選んだ画像をごみ箱へ（3 枚）` (primary, disabled at
+  0) + `やめる`.
+- While the chosen session is recording: rename, memo, and open folder work; `PDF を開く`,
+  `PDF を作り直す`, `同じスライドをまとめる…`, `画像を選ぶ`, and `削除…` are not shown
+  (design_brief: no unusable controls), and a line `記録中のため、整理は停止してからできます。`
+  explains why.
 
-### Layout B: one list
+Confirmations (in-page dialogs, never `window.confirm`; light dismiss + explicit buttons):
+- `削除…`: `「{title}」をごみ箱に移しますか？ フォルダごと移します。ごみ箱から戻せます。`
+  with `ごみ箱に移す` (danger primary) and `やめる`.
+- `選んだ画像をごみ箱へ（N 枚）`: `N 枚をごみ箱に移して、PDF を作り直しますか？` with
+  `ごみ箱に移す` and `やめる`.
+- `同じスライドをまとめる…`: calls `fold_session`; when it returns indices, enters select
+  mode with exactly those selected and shows
+  `同じスライドとみなした N 枚を選びました。確かめてから、ごみ箱に移してください。`; when it
+  returns none, an inline note `同じスライドは見つかりませんでした。` Nothing is moved
+  until the user confirms the selection above.
 
-- Under the toolbar, the search field (max-width 640 px), then rows of full width
-  (max-width 960 px, centred):
-  thumbnail 96 x 54, title + meta (as in A), and on the right the actions as text buttons
-  `開く`, `フォルダ`, `PDF`, and an IconButton `削除` (trash icon, danger colour).
-- `開く` replaces the list with the detail view of A's right pane, plus a `戻る` button at
-  the top left.
+Empty states: no sessions at all: `まだ記録はありません。` + `開始` (primary, opens the
+picker); search with no hits: `見つかりませんでした。`
 
-## Search
+Errors from commands show inline under the action row (Notice component), in the effective
+language, as returned.
 
-Case-insensitive; spaces separate terms, all must match (AND), each term may match any
-field: custom name, source title, source app, and the date written as `10/7`, `10月7日`,
-`2026-10-07`. Updates as you type. The prototype filters the mock list client-side.
+Narrow window (760 px): the left column 280 px, grid columns shrink, no horizontal scroll.
 
-## Data (mock now; Rust after GO)
+## Types (add to src/ipc/types.ts; serde camelCase on the Rust side)
 
 ```ts
 interface SessionSummary {
-  id: string;              // folder name, e.g. "2026-10-07_1242"
-  title: string;           // custom name, else source title
+  dir: string;                 // absolute session folder: the identifier
+  folder: string;              // folder name, e.g. "2026-10-07_1242"
+  title: string;               // customTitle, else sourceTitle
   customTitle: string | null;
-  sourceApp: string | null;   // e.g. "Safari"; null for mp4
-  sourceTitle: string;     // window title or video file name
+  memo: string;                // "" when none
+  sourceApp: string | null;    // e.g. "Safari"; null for mp4
+  sourceTitle: string;         // window title or video file name
   sourceKind: "window" | "mp4";
-  startedAt: string;       // RFC 3339
-  endedAt: string | null;  // null while recording
-  count: number;
-  hasPdf: boolean;
-  recording: boolean;
-  thumb: string | null;    // data URL of the first slide (small), null when count is 0
+  startedAt: string;           // RFC 3339 from session.json
+  endedAt: string | null;      // null while recording (or after a crash)
+  count: number;               // captures whose PNG exists
+  hasPdf: boolean;             // slides.pdf exists
+  recording: boolean;          // the folder of the running or paused session
+  thumbPath: string | null;    // the first existing capture PNG, null when none
 }
+
+interface CaptureView {
+  index: number;
+  file: string;                // e.g. "003_00-04-12.png"
+  path: string;                // absolute path of the PNG
+  tContent: number;
+}
+
 interface SessionDetail extends SessionSummary {
-  captures: { index: number; file: string; tContent: number; thumb: string }[];
+  captures: CaptureView[];     // in index order, only those whose PNG exists
 }
-listSessions(): Promise<SessionSummary[]>
-getSession(id: string): Promise<SessionDetail>
 ```
 
-Mock data: six sessions (all invented; no real lecture content):
-1. recording now: `第2回授業スライド.mp4`, Safari, today 14:10, 12 slides
-2. `第1回授業スライド.mp4`, Safari, today 12:42-13:15, 36 slides, PDF
-3. custom name `デジタル人文学 第1回`, source `Zoom ミーティング`, zoom.us, Oct 3 10:30-12:00, 58 slides, PDF
-4. `統計学特論`, `Zoom ミーティング`, zoom.us, Oct 2 13:00-14:30, 41 slides, PDF
-5. `lecture_2026-10-01.mp4` (mp4 mode), Oct 1, 22 slides, PDF
-6. `情報処理演習 - Microsoft Stream`, Microsoft Edge, Sep 30, 0 slides, no PDF
+Thumbnails: the UI never gets image bytes through commands. `thumbUrl(path)` in
+`src/ipc/index.ts` returns `convertFileSrc(path, "zspthumb") + "?w=" + width` (Tauri builds
+`zspthumb://localhost/...` on macOS and `http://zspthumb.localhost/...` on Windows); `<img
+loading="lazy">` loads only what is on screen. The mock returns generated SVG data URLs.
 
-Thumbnails: generated SVG data URLs that look like plain slides (white, a title bar of
-text, three to five grey lines, sometimes a box), different per slide. Light content only;
-they are images, so they do not follow the theme.
+## Commands (add to docs/impl/ipc.md)
 
-## Wording (draft; Japanese first, English in src/i18n/en.ts)
+All library commands are `async` (they read folders, decode images, or open dialogs) and run
+off the main thread. `dir` must be a folder directly inside a known root (see Roots) with a
+session.json; anything else is an error `記録が見つかりません。` / `Session not found.`
+
+| Command | Args | Returns | Behaviour |
+|---|---|---|---|
+| `open_library` | | | Opens or focuses the library window (macOS: Regular policy). |
+| `list_sessions` | | `SessionSummary[]` | Every session folder in every known root, newest `startedAt` first. Unreadable folders and folders without a parsable session.json are skipped. |
+| `get_session` | `dir: string` | `SessionDetail` | |
+| `open_session_folder` | `dir` | | Opens the folder with the OS (opener). |
+| `open_session_pdf` | `dir` | | Opens slides.pdf; error `PDF がありません。` / `There is no PDF.` when missing. |
+| `rebuild_session_pdf` | `dir` | `number` | zsp-output `rebuild_pdf`; returns the page count. Error while recording. |
+| `rename_session` | `dir, title: string \| null` | | Writes `title` to meta.json (trimmed; empty or null clears it). Allowed while recording. |
+| `set_session_memo` | `dir, memo: string` | | Writes `memo` to meta.json. Allowed while recording. |
+| `trash_session` | `dir` | | Moves the folder to the OS trash. Error while recording. Clears `lastSession` if it pointed there. |
+| `trash_captures` | `dir, indices: number[]` | `number` | Moves those PNGs to the trash, removes their records from session.json, rebuilds slides.pdf when it existed (or deletes it when no image is left); returns the number moved. Error while recording. |
+| `fold_session` | `dir` | `number[]` | Dry run of `zsp_detect::fold_captures` over the session's existing PNGs (in index order); returns the indices it would not keep. Error while recording. |
+| `open_capture` | `path: string` | | Opens one capture PNG with the OS default app. The path must be a capture of a known session. |
+
+Events (Rust -> all windows): `library-changed` (no payload) after anything that changes what
+`list_sessions` or `get_session` returns: a session starts, a capture is saved, replaced, or
+undone, a session finishes, a library command changes something, the save root changes. The
+library refetches the list, and the open detail if any, on it (coalesce bursts: at most one
+refetch per 300 ms).
+
+`begin_region` gains: when called from the library window, it does not close it (it still
+closes the panel when called from there).
+
+## Rust side
+
+- `crates/zsp-output`:
+  - `read_session(dir) -> io::Result<SessionFile>`.
+  - Session metadata in a separate file `meta.json` in the session folder:
+    `{ "title": string | null, "memo": string }`, read with defaults when missing, written
+    atomically. A separate file so a rename or memo never races the session writer, which
+    rewrites session.json after every capture.
+  - `trash_captures(dir, indices, trash) -> io::Result<usize>`: as the command above (records
+    removed, PDF rebuilt or removed, `pdf` updated: pages and `rebuilt_at`, or null).
+  - Tests (ACCEPTANCE B11, B12).
+- `src-tauri/src/library.rs`: the commands, the scan, the `zspthumb` protocol, the window.
+- Roots: the current save root (the `ZSP_SAVE_ROOT` override when set) plus the roots used
+  before. Those are kept by Rust only, in the settings file under `knownRoots` (`string[]`,
+  default empty): not part of the `Settings` type the UI sends, and kept as they are by
+  `set_settings`; when `set_settings` changes `saveRoot`, the old root is appended if
+  missing. Missing folders are skipped.
+- `zspthumb` protocol (`register_asynchronous_uri_scheme_protocol`): the request path is a
+  capture PNG path (URL-decoded); serve only files that end in `.png` and lie directly in a
+  session folder of a known root (canonicalize both, compare), else 404. Query `w` (default
+  360, clamp 64-800): JPEG (quality 80) at most that wide, cached in
+  `<app cache dir>/thumbs/<hash of path, size, and mtime>.jpg`; serve from the cache when
+  present. Content-Type `image/jpeg`. Decode and resize off the main thread.
+- CSP `img-src 'self' data: zspthumb: http://zspthumb.localhost`. Capability windows gain
+  `library`; still only `core:default`.
+- Tray menu: `履歴…` / `History…` as the first item. Panel header: a history IconButton
+  (FiClock or similar from react-icons, label `履歴` / `History`) -> `open_library`.
+- `library-changed`: emitted from `ui::sync` callers where a notice changes the count
+  (Saved, Replaced, Undone, Finished), on start, and from the library commands.
+
+## Strings (add to src/i18n; ja and en)
 
 | Key | ja | en |
 |---|---|---|
-| library.search | 題名・日付・アプリで検索 | Search by title, date, or app |
-| library.meta | {date} · {duration} · {count} 枚 | {date} · {duration} · {count} slides |
-| library.recording | 記録中 | Recording |
-| library.noPdf | PDF なし | No PDF |
-| library.hasPdf | PDF あり | PDF |
-| library.source | {app} の「{title}」 | “{title}” in {app} |
-| library.rename | 名前を変更 | Rename |
-| library.openFolder | フォルダを開く | Open folder |
-| library.openPdf | PDF を開く | Open PDF |
-| library.rebuildPdf | PDF を作り直す | Rebuild PDF |
-| library.dedupe | 同じスライドをまとめる… | Merge duplicate slides… |
-| library.select | 画像を選ぶ | Select images |
-| library.trashSelected | 選んだ画像をごみ箱へ（{count} 枚） | Move {count} to Trash |
-| library.cancelSelect | やめる | Done |
-| library.delete | 削除… | Delete… |
-| library.open | 開く | Open |
-| library.folder | フォルダ | Folder |
-| library.empty | まだ記録はありません。授業の窓を選んで開始すると、ここに並びます。 | No sessions yet. Start capturing a lecture window and it will appear here. |
-| library.noHits | 見つかりませんでした。 | No matches. |
-| library.caption | {index} · {time} | {index} · {time} |
+| library.open | 履歴… | History… |
+| library.openButton | 履歴 | History |
+| library.memo | メモ | Memo |
+| library.memoPlaceholder | 授業の内容や課題など | Notes about the lecture, assignments, … |
+| library.saved | 保存しました | Saved |
+| library.recordingLocked | 記録中のため、整理は停止してからできます。 | Stop recording to tidy up this session. |
+| library.confirmDelete | 「{title}」をごみ箱に移しますか？ フォルダごと移します。ごみ箱から戻せます。 | Move “{title}” to the Trash? The whole folder moves; you can restore it from the Trash. |
+| library.confirmDeleteButton | ごみ箱に移す | Move to Trash |
+| library.confirmTrashImages | {count} 枚をごみ箱に移して、PDF を作り直しますか？ | Move {count} images to the Trash and rebuild the PDF? |
+| library.dedupeSelected | 同じスライドとみなした {count} 枚を選びました。確かめてから、ごみ箱に移してください。 | Selected {count} images that repeat a slide. Check them, then move them to the Trash. |
+| library.dedupeNone | 同じスライドは見つかりませんでした。 | No repeated slides found. |
+| library.pickTitle | 授業の窓を選ぶ | (same as the panel's picker title) |
+| library.empty | まだ記録はありません。 | No sessions yet. |
+| library.notFound | 記録が見つかりません。 | Session not found. |
+| library.noPdfError | PDF がありません。 | There is no PDF. |
+| library.cancel | やめる | Cancel |
 
-Dates: ja `10月7日（水）12:42`, en `Oct 7 (Tue) 12:42`; durations: ja `33 分` / `1 時間 30 分`,
-en `33 min` / `1 h 30 min`.
+Keep the prototype's other keys (search, meta, recording, noPdf, hasPdf, source, rename,
+openFolder, openPdf, rebuildPdf, dedupe, select, trashSelected, cancelSelect, delete,
+noHits, caption). Drop the layout-B-only keys (open, folder). Rust-side strings (tray item,
+errors) go in src-tauri/src/i18n.rs.
 
-## Checks for the prototype
+## Checks
 
-`pnpm lint`, `pnpm test` (a few tests: search filters by each field, AND of terms, empty
-states, keyboard selection), `sh scripts/ui-check.sh` with a new `tests/ui/library.spec.ts`:
-axe has no violations and there is no horizontal overflow, for layout A at 1280 x 800 and
-760 x 600 and layout B at 1280 x 800 (list and opened), each light and dark; screenshots go
-to `test-results/ui/library-*.png`.
-
-## After GO: implementation outline (draft, the parts no round 3 answer changes)
-
-Rust (new module `src-tauri/src/library.rs`, data helpers in `zsp-output`):
-- Session roots: the current save root plus every save root used before (settings gain
-  `knownRoots: string[]`, appended when the save root changes). `list_sessions` scans each
-  root's direct subfolders for `session.json`, newest first; unreadable folders are skipped.
-- `SessionSummary` from session.json: title = `title` (new optional field, written by
-  rename) or source title; count = captures whose PNG still exists; hasPdf = slides.pdf
-  exists; recording = the folder of the active session.
-- Thumbnails: JPEG 320 px wide in the app cache dir (`<cache>/thumbs/<session id>/<file>.jpg`),
-  made on first request in a background thread; the webview gets them through the asset
-  protocol scoped to the cache dir only (capability change: `core:default` stays; add the
-  asset protocol scope in tauri.conf.json, nothing else).
-- Actions: open folder / open PDF (opener), rebuild PDF (`zsp_output::rebuild_pdf`, any
-  session), rename (rewrite session.json `title` atomically), delete session (trash the
-  folder), delete images (trash the PNGs, drop them from session.json, rebuild the PDF),
-  merge duplicate slides (run the detector over the session's PNGs as in
-  `crates/zsp-detect/examples/dedupe_session.rs`, return the files it would not keep as a
-  pre-selection; nothing is deleted until the user confirms).
-- Window: label `library`; opening it switches macOS to `ActivationPolicy::Regular` (Dock and
-  Cmd-Tab); closing the last library window switches back to `Accessory`. Reopen (Finder,
-  Spotlight, Dock) opens it (if R3-8 a). Tray menu gains `履歴…`; the panel header gains a
-  history IconButton.
-- The toolbar's start: opens the window picker as a dialog inside the library window
-  (reusing the panel's picker component), then the region window, as from the panel.
-- session.json schema: optional `title` (string) and, if R3-7 includes memo, `memo`.
+ACCEPTANCE C10-C14 (UI, on the mock) and B11-B12 (zsp-output); `sh scripts/check.sh` passes.
