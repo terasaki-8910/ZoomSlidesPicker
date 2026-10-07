@@ -588,11 +588,13 @@ pub fn write_meta(dir: &Path, meta: &SessionMetaFile) -> io::Result<()> {
 }
 
 /// Moves the PNGs at `indices` to `trash`, removes their records from session.json,
-/// rebuilds slides.pdf from what is left (or removes it when nothing is), and updates
-/// `pdf` (`pages` and `rebuilt_at`, or `None`) -- the history window's `trash_captures`
-/// command (docs/impl/library.md). `captures` keeps every other record, in their original
-/// order. Errors, and changes nothing, when `indices` names one that doesn't exist
-/// (ACCEPTANCE B12).
+/// rebuilds slides.pdf from the images still on disk (or removes it when none is left), and
+/// updates `pdf` (`pages` and `rebuilt_at`, or `None`) -- the history window's
+/// `trash_captures` command (docs/impl/library.md). `captures` keeps every other record, in
+/// their original order. A chosen PNG that is already gone counts as moved. Errors, and
+/// changes nothing, when `indices` names one that doesn't exist (ACCEPTANCE B12).
+/// session.json is rewritten as soon as the files are moved, so a failure while writing the
+/// PDF never leaves records pointing at files in the trash.
 pub fn trash_captures(
     dir: &Path,
     indices: &[usize],
@@ -617,38 +619,39 @@ pub fn trash_captures(
         }
     }
 
-    let mut removed = Vec::new();
-    let mut kept = Vec::new();
-    for rec in file.captures {
-        if wanted.contains(&rec.index) {
-            removed.push(rec);
-        } else {
-            kept.push(rec);
+    let (removed, kept): (Vec<CaptureRecord>, Vec<CaptureRecord>) = file
+        .captures
+        .into_iter()
+        .partition(|rec| wanted.contains(&rec.index));
+    file.captures = kept;
+    for rec in &removed {
+        let path = dir.join(&rec.file);
+        if path.exists() {
+            trash.trash(&path)?;
         }
     }
-    file.captures = kept;
+    write_session_json(dir, &file)?;
 
-    for rec in &removed {
-        trash.trash(&dir.join(&rec.file))?;
-    }
-
-    if file.captures.is_empty() {
-        let pdf_path = dir.join(PDF_FILE);
+    let images: Vec<PathBuf> = file
+        .captures
+        .iter()
+        .map(|c| dir.join(&c.file))
+        .filter(|p| p.is_file())
+        .collect();
+    let pdf_path = dir.join(PDF_FILE);
+    if images.is_empty() {
         if pdf_path.exists() {
             fs::remove_file(&pdf_path)?;
         }
         file.pdf = None;
     } else {
-        let images: Vec<PathBuf> = file.captures.iter().map(|c| dir.join(&c.file)).collect();
-        let pages = images.len();
-        write_pdf(&images, &dir.join(PDF_FILE))?;
+        write_pdf(&images, &pdf_path)?;
         file.pdf = Some(PdfRecord {
             file: PDF_FILE.to_string(),
-            pages,
+            pages: images.len(),
             rebuilt_at: Some(now.to_rfc3339_opts(SecondsFormat::Secs, false)),
         });
     }
-
     write_session_json(dir, &file)?;
     Ok(removed.len())
 }

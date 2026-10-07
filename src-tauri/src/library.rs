@@ -11,6 +11,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{Condvar, Mutex};
 use std::thread;
 
 use chrono::DateTime;
@@ -384,9 +385,38 @@ pub fn register_protocol<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri
     builder.register_asynchronous_uri_scheme_protocol(THUMB_SCHEME, |ctx, request, responder| {
         let app = ctx.app_handle().clone();
         thread::spawn(move || {
+            let _slot = ThumbSlot::acquire();
             responder.respond(handle_thumb_request(&app, &request));
         });
     })
+}
+
+/// At most this many thumbnails are made at once: a grid of hundreds of captures asks for
+/// many at a time, and each decode holds a full-size frame (about 15 MB at 2560 x 1520).
+const THUMB_PARALLEL: usize = 3;
+
+static THUMB_BUSY: (Mutex<usize>, Condvar) = (Mutex::new(0), Condvar::new());
+
+/// One of the `THUMB_PARALLEL` slots, released on drop.
+struct ThumbSlot;
+
+impl ThumbSlot {
+    fn acquire() -> Self {
+        let (lock, cvar) = &THUMB_BUSY;
+        let mut busy = cvar
+            .wait_while(lock.lock().unwrap(), |n| *n >= THUMB_PARALLEL)
+            .unwrap();
+        *busy += 1;
+        ThumbSlot
+    }
+}
+
+impl Drop for ThumbSlot {
+    fn drop(&mut self) {
+        let (lock, cvar) = &THUMB_BUSY;
+        *lock.lock().unwrap() -= 1;
+        cvar.notify_one();
+    }
 }
 
 fn not_found_response() -> tauri::http::Response<Vec<u8>> {
@@ -453,12 +483,8 @@ fn thumbnail_jpeg<R: Runtime>(
     let (w, h) = img.dimensions();
     let target_w = width.min(w).max(1);
     let target_h = ((u64::from(h) * u64::from(target_w)) / u64::from(w.max(1))).max(1) as u32;
-    let scaled = image::imageops::resize(
-        &img,
-        target_w,
-        target_h,
-        image::imageops::FilterType::Lanczos3,
-    );
+    // Box-filter reduction: fast, and sharp enough for a thumbnail of text.
+    let scaled = image::imageops::thumbnail(&img, target_w, target_h);
 
     let mut bytes = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, THUMB_QUALITY)

@@ -545,9 +545,18 @@ fn b12_trash_captures_rebuilds_or_removes_the_pdf() {
     assert_eq!(fs::read(dir.join(SESSION_FILE)).unwrap(), before);
     assert_eq!(read_session(&dir)["captures"].as_array().unwrap().len(), 3);
 
+    // A remaining image already gone from disk (deleted by hand) is left out of the PDF;
+    // a chosen image already gone counts as moved.
+    fs::remove_file(&paths[4]).unwrap();
+    assert_eq!(trash_captures(&dir, &[3], &trash, now).unwrap(), 1);
+    let s1 = read_session(&dir);
+    assert_eq!(s1["captures"].as_array().unwrap().len(), 2);
+    assert_eq!(s1["pdf"]["pages"], 1, "only 001 is still on disk");
+    assert_eq!(trash_captures(&dir, &[5], &trash, now).unwrap(), 1);
+
     // Trashing everything left removes the PDF.
-    let moved_rest = trash_captures(&dir, &[1, 3, 5], &trash, now).unwrap();
-    assert_eq!(moved_rest, 3);
+    let moved_rest = trash_captures(&dir, &[1], &trash, now).unwrap();
+    assert_eq!(moved_rest, 1);
     assert!(!dir.join(PDF_FILE).exists());
     let s2 = read_session(&dir);
     assert!(s2["captures"].as_array().unwrap().is_empty());
