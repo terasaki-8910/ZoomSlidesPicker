@@ -61,7 +61,7 @@ zip の中の 4 つのファイルを `C:\zsp` フォルダに置く前提で書
 - Zoom は窓のまま使う（全画面表示にはしない）。録画はブラウザの専用の窓で開き、再生中はマウスを動画の外に置く。
 - 範囲は、スライドの部分だけをドラッグで囲む（Zoom の操作バーや参加者の映像は外す）。
 - ショートカット：Ctrl+Alt+Shift+S（今すぐ保存）、Ctrl+Alt+Shift+Z（直前の保存の取り消し）、Ctrl+Alt+Shift+P（一時停止と再開）。
-- 授業の窓を最小化すると、一時停止して通知が出る。戻したら、パネルの「再開」。
+- 授業の窓を最小化すると、一時停止して通知が出る。戻すと自動で再開する（0.1.5 から）。
 - 終わったら「停止」。PDF ができると通知が出る。保存した枚数は、アイコンにマウスを乗せると出る。
 
 ## 6. 知らせてほしいこと
@@ -88,6 +88,27 @@ XWIN_CACHE_DIR="$HOME/Library/Caches/cargo-xwin" PATH="/opt/homebrew/opt/llvm/bi
 cargo-xwin は初回に Microsoft の Windows SDK と CRT をダウンロードする（Microsoft のライセンスの下で）。インストーラーは NSIS だけ（MSI は Windows でないと作れない）。署名はしていない。
 
 ## リリース（開発の控え）
+
+Mac の版は、ログインキーチェーンの自己署名の証明書「ZoomSlidesPicker Local Signing」で署名する（`src-tauri/tauri.conf.json` の `bundle.macOS.signingIdentity`、DECISIONS 2026-10-13）。署名が版ごとに変わらないので、画面収録の許可が入れ替えた後も続く。証明書がない Mac では、次の手順で作る（最初の署名のときに、キーチェーンの鍵を使う許可を「常に許可」にする）:
+
+```sh
+cat > cert.cnf <<'CNF'
+[req]
+distinguished_name = dn
+x509_extensions = ext
+prompt = no
+[dn]
+CN = ZoomSlidesPicker Local Signing
+[ext]
+basicConstraints = critical, CA:false
+keyUsage = critical, digitalSignature
+extendedKeyUsage = critical, codeSigning
+CNF
+/usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 3650 -config cert.cnf
+/usr/bin/openssl pkcs12 -export -inkey key.pem -in cert.pem -name "ZoomSlidesPicker Local Signing" -out cert.p12 -passout pass:<一時的なパスワード>
+security import cert.p12 -k ~/Library/Keychains/login.keychain-db -P <一時的なパスワード> -T /usr/bin/codesign
+rm key.pem cert.p12
+```
 
 Mac の DMG（`CARGO_TARGET_DIR=$PWD/target-dmg pnpm tauri build --bundles dmg`）と、上のインストーラーを作ってから:
 

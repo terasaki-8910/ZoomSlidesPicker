@@ -37,7 +37,7 @@ export const en: Record<keyof typeof ja, string> = {
   "permission.openSettings": "Open System Settings",
   "permission.check": "Check permission",
 
-  "notice.windowLost": "Paused because the lecture window can't be found.",
+  "notice.windowLost": "Paused because the lecture window can't be found. It resumes when the window is back.",
   "notice.blank":
     "The screen has been a single colour for over 10 seconds. Sharing may have stopped, capture may be blocked, or the window may be minimized.",
 
