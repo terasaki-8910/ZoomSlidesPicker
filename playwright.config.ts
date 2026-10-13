@@ -16,7 +16,8 @@ export default defineConfig({
     locale: "ja-JP",
   },
   webServer: {
-    command: `pnpm exec vite preview --outDir dist-mock --port ${PORT} --strictPort`,
+    // Bind to the same address the tests use: "localhost" can resolve to [::1] only.
+    command: `pnpm exec vite preview --outDir dist-mock --host 127.0.0.1 --port ${PORT} --strictPort`,
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
