@@ -70,7 +70,8 @@ pub type Notify = Box<dyn Fn(&Notice, &Status) + Send>;
 ///
 /// - Live source: one frame every `interval_s` of wall-clock time; `t` is seconds since
 ///   `spawn`. While paused, no frames are taken, except that while the window is lost the
-///   source is polled every 2 s so that its return is noticed (`Notice::WindowBack`).
+///   source is polled every 2 s; when it returns, the session resumes by itself
+///   (`Notice::WindowBack`).
 /// - Recorded source: frames as fast as they decode; at the end of input the session
 ///   finishes by itself.
 /// - `SourceError::Lost` -> `Session::on_lost`. `SourceError::Failed`: a live source retries

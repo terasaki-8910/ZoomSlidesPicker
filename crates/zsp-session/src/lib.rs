@@ -81,6 +81,7 @@ pub enum Notice {
     Paused,
     Resumed,
     WindowLost,
+    /// The lost window can be captured again; the session has resumed by itself.
     WindowBack,
     Finished {
         dir: PathBuf,
@@ -133,8 +134,9 @@ impl Session {
     /// writes it as the new version of an earlier capture (the old file goes to the trash);
     /// `Revisit` and `Blank` are recorded in session.json.
     /// Paused: the frame is ignored, except that the first frame after a lost window records
-    /// `window_back` (once) and returns [`Notice::WindowBack`]; the session stays paused until
-    /// [`Control::Resume`].
+    /// `window_back`, resumes the session (detector resume at `t`), and is analyzed like a
+    /// running frame; [`Notice::WindowBack`] comes first. A pause by [`Control::Pause`] stays
+    /// until [`Control::Resume`].
     /// Stopped: ignored.
     pub fn on_frame(&mut self, t: f64, frame: RgbaImage) -> io::Result<Vec<Notice>> {
         self.elapsed_s = t;
@@ -144,7 +146,11 @@ impl Session {
                 if self.window_lost {
                     self.window_lost = false;
                     self.writer.add_event(t, EventKind::WindowBack)?;
-                    Ok(vec![Notice::WindowBack])
+                    self.detector.resume(t);
+                    self.state = State::Running;
+                    let mut notices = vec![Notice::WindowBack];
+                    notices.extend(self.on_frame(t, frame)?);
+                    Ok(notices)
                 } else {
                     Ok(Vec::new())
                 }

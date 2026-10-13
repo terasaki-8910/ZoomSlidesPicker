@@ -248,27 +248,34 @@ fn pause_drops_the_pending_slide_and_ignores_frames() {
 }
 
 #[test]
-fn lost_window_pauses_once_and_reports_its_return() {
+fn lost_window_pauses_once_and_resumes_when_it_returns() {
     let root = tempfile::tempdir().unwrap();
     let mut s = new_session(root.path());
     let mut n = Vec::new();
     feed(&mut s, &slide(b'A'), 0.0, 8.0, &mut n);
+    let before = saved(&n).len();
     assert_eq!(s.on_lost(8.0).unwrap(), vec![Notice::WindowLost]);
     assert!(s.on_lost(8.5).unwrap().is_empty(), "one report per episode");
     let st = s.status();
     assert_eq!((st.state, st.window_lost), (State::Paused, true));
 
-    assert_eq!(
-        s.on_frame(10.0, slide(b'B')).unwrap(),
-        vec![Notice::WindowBack]
-    );
+    let back = s.on_frame(10.0, slide(b'B')).unwrap();
+    assert_eq!(back.first(), Some(&Notice::WindowBack), "{back:?}");
     let st = s.status();
     assert_eq!(
         (st.state, st.window_lost),
-        (State::Paused, false),
-        "stays paused until resumed"
+        (State::Running, false),
+        "resumes by itself"
     );
-    assert!(s.on_frame(10.5, slide(b'B')).unwrap().is_empty());
+    n.extend(back);
+    feed(&mut s, &slide(b'B'), 10.5, 20.0, &mut n);
+    let saves = saved(&n);
+    assert_eq!(
+        saves.len(),
+        before + 1,
+        "B is saved after the return: {n:?}"
+    );
+    assert_eq!(png_rgb(&saves.last().unwrap().1), rgb(&slide(b'B')));
     let events: Vec<String> = session_json(&st.dir)["events"]
         .as_array()
         .unwrap()
@@ -276,6 +283,28 @@ fn lost_window_pauses_once_and_reports_its_return() {
         .map(|e| e["type"].as_str().unwrap().to_string())
         .collect();
     assert_eq!(events, vec!["window_lost", "window_back"]);
+}
+
+#[test]
+fn manual_pause_is_kept_while_the_window_is_lost() {
+    let root = tempfile::tempdir().unwrap();
+    let mut s = new_session(root.path());
+    let mut n = Vec::new();
+    feed(&mut s, &slide(b'A'), 0.0, 4.0, &mut n);
+    assert_eq!(
+        s.control(4.0, Control::Pause).unwrap(),
+        vec![Notice::Paused]
+    );
+    assert!(
+        s.on_lost(5.0).unwrap().is_empty(),
+        "a paused session does not lose the window"
+    );
+    assert!(s.on_frame(7.0, slide(b'B')).unwrap().is_empty());
+    assert_eq!(
+        s.status().state,
+        State::Paused,
+        "stays paused until resumed"
+    );
 }
 
 #[test]
