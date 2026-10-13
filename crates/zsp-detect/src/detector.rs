@@ -27,7 +27,12 @@
 //!
 //! A player's control bar (R4-4) is a difference that only darkens or only lightens a band
 //! along the bottom or top edge (`edge_overlay`): a state that only adds one is the same
-//! slide, and the picture without it replaces a capture saved with it.
+//! slide, and the picture without it replaces a capture saved with it. A few other cells may
+//! change with it (Zoom's handle at the top centre, a pointer).
+//!
+//! A change over more than half of the compared cells is another picture, never an addition
+//! (`Config::add_max_share`): against the old background, a slide giving way to a dark
+//! screen looks like content added everywhere.
 //!
 //! Protocol for the caller (the session engine):
 //! - Call [`Detector::step`] once per sample, in time order, and apply the returned events
@@ -64,8 +69,10 @@ pub struct Config {
     /// least `edge_coverage` of the band's cells that are brighter than `edge_dark_floor`
     /// (black bars cannot darken) in at least `edge_min_width` of the columns that have
     /// such cells, and goes one way in at least `edge_direction` of its cells (darker: the
-    /// bar is shown; lighter: hidden). A state that only adds such a bar is the same slide; the picture without
-    /// it replaces a capture saved with it.
+    /// bar is shown; lighter: hidden). Outside the band, at most `change_thresh` of the
+    /// compared cells may change (Zoom shows a small handle at the top centre together
+    /// with its toolbar). A state that only adds such a bar is the same slide; the picture
+    /// without it replaces a capture saved with it.
     pub edge_band_share: f64,
     pub edge_min_width: f64,
     pub edge_coverage: f64,
@@ -80,6 +87,11 @@ pub struct Config {
     /// Share of cells where content appeared on empty background => an addition (a build),
     /// not the same slide getting sharper.
     pub added_thresh: f64,
+    /// A change over more than this share of the compared cells is another picture, never
+    /// an addition: all of it counts as removed. (Against the old background, a slide
+    /// giving way to a dark screen looks like content added everywhere and nothing taken
+    /// away.)
+    pub add_max_share: f64,
     /// Number of recent comparisons kept for motion detection.
     pub motion_window: usize,
     /// A cell is moving when active in more than this share of the window.
@@ -153,6 +165,7 @@ impl Default for Config {
             change_thresh: 0.002,
             removed_thresh: 0.001,
             added_thresh: 0.001,
+            add_max_share: 0.5,
             motion_window: 6,
             motion_ratio: 0.5,
             mask_pad: 1,
@@ -272,30 +285,71 @@ fn edge_overlay(old: &Grid, new: &Grid, keep: &[bool], cfg: &Config) -> Option<O
     if w == 0 || h < 4 || band_rows < 2 {
         return None;
     }
+    let kept = keep.iter().filter(|&&k| k).count();
+    let changed =
+        |i: usize| keep[i] && (new.data[i] as i32 - old.data[i] as i32).abs() > cfg.cell_thresh;
+    // The bottom band, then the top one.
+    [(h - band_rows, h), (0, band_rows)]
+        .into_iter()
+        .find_map(|rows| edge_band_overlay(old, new, keep, cfg, rows, kept, &changed))
+}
+
+/// [`edge_overlay`] for the band of rows `lo..hi` (touching the bottom or the top edge).
+fn edge_band_overlay(
+    old: &Grid,
+    new: &Grid,
+    keep: &[bool],
+    cfg: &Config,
+    (lo, hi): (usize, usize),
+    kept: usize,
+    changed: &impl Fn(usize) -> bool,
+) -> Option<Overlay> {
+    let (w, h) = (old.width, old.height);
+    // The bar: the clusters of changed cells in the band that reach the edge, and those
+    // within the rows they span (a player's buttons over black bars beside the picture).
+    // Every other changed cell (Zoom's handle at the top centre, a pointer above the bar) is
+    // a stray, and the rest of the picture stays the same only while the strays are within
+    // the measure of a change at all.
+    let in_band: Vec<bool> = (0..w * h)
+        .map(|i| (lo..hi).contains(&(i / w)) && changed(i))
+        .collect();
+    let (labels, boxes) = label_clusters(&in_band, w, h);
+    let at_bottom = hi == h;
+    let at_edge = |b: &Cluster| if at_bottom { b.y1 + 2 >= h } else { b.y0 <= 1 };
+    let edge_boxes = boxes.iter().filter(|b| at_edge(b));
+    let in_bar: Vec<bool> = if at_bottom {
+        let top = edge_boxes.map(|b| b.y0).min().unwrap_or(h);
+        boxes.iter().map(|b| b.y0 >= top).collect()
+    } else {
+        let bottom = edge_boxes.map(|b| b.y1).max();
+        boxes
+            .iter()
+            .map(|b| bottom.is_some_and(|m| b.y1 <= m))
+            .collect()
+    };
+    let bar = |i: usize| in_band[i] && in_bar[labels[i]];
+    let strays = (0..w * h).filter(|&i| changed(i) && !bar(i)).count();
+    if strays as f64 > cfg.change_thresh * kept as f64 {
+        return None;
+    }
     let mut cols = vec![false; w];
     let (mut darker, mut total) = (0usize, 0usize);
     let (mut min_row, mut max_row) = (h, 0usize);
-    for y in 0..h {
+    for y in lo..hi {
         for (x, col) in cols.iter_mut().enumerate() {
             let i = y * w + x;
-            let d = new.data[i] as i32 - old.data[i] as i32;
-            if keep[i] && d.abs() > cfg.cell_thresh {
+            if bar(i) {
                 total += 1;
                 *col = true;
                 min_row = min_row.min(y);
                 max_row = max_row.max(y);
-                if d < 0 {
+                if new.data[i] < old.data[i] {
                     darker += 1;
                 }
             }
         }
     }
     if total == 0 {
-        return None;
-    }
-    let at_bottom = max_row + 2 >= h && min_row + band_rows >= h;
-    let at_top = min_row <= 1 && max_row < band_rows;
-    if !(at_bottom || at_top) {
         return None;
     }
     // Most of the band changed, where anything could (black stays black under a bar, so
@@ -308,7 +362,7 @@ fn edge_overlay(old: &Grid, new: &Grid, keep: &[bool], cfg: &Config) -> Option<O
             if keep[i] && old.data[i].max(new.data[i]) > cfg.edge_dark_floor {
                 eligible += 1;
                 *col = true;
-                if (new.data[i] as i32 - old.data[i] as i32).abs() > cfg.cell_thresh {
+                if bar(i) {
                     covered += 1;
                 }
             }
@@ -342,7 +396,8 @@ const BG_PAD: usize = 3;
 /// What a change did, as shares of the kept cells that changed by more than `thresh`:
 /// `removed`, moved toward the background around them (content taken away); `added`, were
 /// background and are not any more (content added on an empty area). 0.0 when no cell is
-/// kept.
+/// kept. When more than `max_share` of the kept cells changed, the picture was replaced
+/// (`Config::add_max_share`): every changed cell counts as removed, none as added.
 ///
 /// The background is local: the median of `old` over the kept cells of each cluster's box
 /// grown by `BG_PAD`. (The reference uses the median of the whole grid, which lands between
@@ -360,6 +415,7 @@ fn change_kinds(
     w: usize,
     h: usize,
     thresh: f64,
+    max_share: f64,
 ) -> ChangeKinds {
     let kept = keep.iter().filter(|&&k| k).count();
     if kept == 0 {
@@ -371,6 +427,13 @@ fn change_kinds(
     let changed: Vec<bool> = (0..old.len())
         .map(|i| keep[i] && (new[i] - old[i]).abs() > thresh)
         .collect();
+    let changed_share = changed.iter().filter(|&&c| c).count() as f64 / kept as f64;
+    if changed_share > max_share {
+        return ChangeKinds {
+            removed: changed_share,
+            added: 0.0,
+        };
+    }
     let (labels, boxes) = label_clusters(&changed, w, h);
     let bgs: Vec<f64> = boxes
         .iter()
@@ -408,15 +471,24 @@ fn grid_f64(g: &Grid) -> Vec<f64> {
 
 /// [`change_kinds`] on cells. Reference: `removed_frac` (removed only, whole-grid
 /// background).
-fn cell_change_kinds(old: &Grid, new: &Grid, keep: &[bool], cell_thresh: i32) -> ChangeKinds {
+fn cell_change_kinds(old: &Grid, new: &Grid, keep: &[bool], cfg: &Config) -> ChangeKinds {
     let (o, n) = (grid_f64(old), grid_f64(new));
-    change_kinds(&o, &n, keep, old.width, old.height, cell_thresh as f64)
+    let thresh = cfg.cell_thresh as f64;
+    change_kinds(
+        &o,
+        &n,
+        keep,
+        old.width,
+        old.height,
+        thresh,
+        cfg.add_max_share,
+    )
 }
 
 /// The removed share of [`change_kinds`] on 2x2 blocks of cells (block means; a block is kept when all its
 /// cells are): blur halos average out at this scale, removed text does not. Reference:
 /// `coarse_removed_frac`.
-fn coarse_removed_frac(old: &Grid, new: &Grid, keep: &[bool], cell_thresh: i32) -> f64 {
+fn coarse_removed_frac(old: &Grid, new: &Grid, keep: &[bool], cfg: &Config) -> f64 {
     let (w, h) = (old.width, old.height);
     let (w2, h2) = (w / 2, h / 2);
     let mut o = Vec::with_capacity(w2 * h2);
@@ -438,7 +510,8 @@ fn coarse_removed_frac(old: &Grid, new: &Grid, keep: &[bool], cell_thresh: i32) 
             k.push(kept);
         }
     }
-    change_kinds(&o, &n, &k, w2, h2, cell_thresh as f64).removed
+    let thresh = cfg.cell_thresh as f64;
+    change_kinds(&o, &n, &k, w2, h2, thresh, cfg.add_max_share).removed
 }
 
 /// Grow `mask` ( `width` x `height`, row-major) by OR-ing each `(2r+1)x(2r+1)` neighbourhood;
@@ -740,7 +813,7 @@ impl Detector {
         }
         if may_replace && let (Some(index), Some(base)) = (self.last_saved_index, &self.last_saved)
         {
-            let kinds = cell_change_kinds(base, &pending.grid, keep, thresh);
+            let kinds = cell_change_kinds(base, &pending.grid, keep, &self.cfg);
             if kinds.removed < self.cfg.removed_thresh && kinds.added >= self.cfg.added_thresh {
                 self.replace(index, pending, t_save, reason, events);
                 return;
@@ -1081,10 +1154,9 @@ impl Detector {
                     let differs = changed_frac(&grid.data, &p.grid.data, firm, cfg.cell_thresh)
                         > cfg.change_thresh;
                     if differs {
-                        let kinds = cell_change_kinds(&p.grid, grid, keep, cfg.cell_thresh);
+                        let kinds = cell_change_kinds(&p.grid, grid, keep, &cfg);
                         let sharpened = sharp >= p.held_sharp * cfg.refine_ratio
-                            && coarse_removed_frac(&p.grid, grid, keep, cfg.cell_thresh)
-                                < cfg.removed_thresh
+                            && coarse_removed_frac(&p.grid, grid, keep, &cfg) < cfg.removed_thresh
                             && kinds.added < cfg.added_thresh;
                         if sharpened {
                             p.grid = grid.clone();

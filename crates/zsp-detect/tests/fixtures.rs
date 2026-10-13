@@ -1,4 +1,4 @@
-//! ACCEPTANCE A1-A10 and A15-A17: the detector on the committed fixtures F1-F11.
+//! ACCEPTANCE A1-A10 and A15-A18: the detector on the committed fixtures F1-F12.
 
 mod common;
 
@@ -112,6 +112,13 @@ fn a16_f10_spaced_build_replaces() {
 #[test]
 fn a17_f11_player_controls_stay_up() {
     check_fixture("F11");
+}
+
+/// A18: a Zoom window whose toolbar, top handle, and pointer show over the slide; a slide
+/// that arrives while they are up; screens with only a participant's name.
+#[test]
+fn a18_f12_zoom_toolbar_and_name_screens() {
+    check_fixture("F12");
 }
 
 /// A1-A3: lecture at normal speed (7 saves, none while the video plays, one revisit).
