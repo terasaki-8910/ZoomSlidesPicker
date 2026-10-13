@@ -147,8 +147,10 @@ pub fn notify_blank_body(lang: Lang) -> &'static str {
 /// design_brief.md > 通知（窓を見失った）, verbatim.
 pub fn notify_window_lost_body(lang: Lang) -> &'static str {
     match lang {
-        Lang::Ja => "授業の窓が見つからないので、一時停止しました。",
-        Lang::En => "Paused because the lecture window can't be found.",
+        Lang::Ja => "授業の窓が見つからないので、一時停止しました。窓が戻ると再開します。",
+        Lang::En => {
+            "Paused because the lecture window can't be found. It resumes when the window is back."
+        }
     }
 }
 

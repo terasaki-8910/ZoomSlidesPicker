@@ -34,7 +34,7 @@ export const ja = {
   "permission.openSettings": "システム設定を開く",
   "permission.check": "許可を確かめる",
 
-  "notice.windowLost": "授業の窓が見つからないので、一時停止しました。",
+  "notice.windowLost": "授業の窓が見つからないので、一時停止しました。窓が戻ると再開します。",
   "notice.blank": "画面が 10 秒以上、単色のままです。共有の停止、キャプチャ防止、最小化の可能性があります。",
 
   "video.processing": "動画を処理中…",

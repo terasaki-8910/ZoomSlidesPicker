@@ -53,6 +53,6 @@
 | 終了（メニュー） | 終了 | Quit |
 | 通知（停止） | 12 枚を保存し、PDF を作りました。 | Saved 12 slides and created a PDF. |
 | 通知（単色） | 画面が 10 秒以上、単色のままです。共有の停止、キャプチャ防止、最小化の可能性があります。 | The screen has been a single colour for over 10 seconds. Sharing may have stopped, capture may be blocked, or the window may be minimized. |
-| 通知（窓を見失った） | 授業の窓が見つからないので、一時停止しました。 | Paused because the lecture window can't be found. |
+| 通知（窓を見失った） | 授業の窓が見つからないので、一時停止しました。窓が戻ると再開します。 | Paused because the lecture window can't be found. It resumes when the window is back. |
 | 権限の案内（Mac） | 画面収録の許可が必要です。システム設定で許可してから、アプリを再起動してください。 | Screen recording permission is needed. Allow it in System Settings, then restart the app. |
 | 設定の項目 | 言語（自動／日本語／English）、保存先、比較の周期（秒）、ショートカット | Language (Auto / 日本語 / English), Save location, Check interval (seconds), Shortcuts |
