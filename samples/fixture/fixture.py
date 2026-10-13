@@ -499,6 +499,72 @@ def render_f11(t):
     return img
 
 
+# F12: a Zoom meeting window (2026-10-13 lecture). The region reaches the window's bottom,
+# so Zoom's toolbar lands inside it whenever the mouse moves, together with a small handle
+# at the top centre and the pointer above the bar; a slide arrives while the toolbar is up.
+# Later nobody shares: Zoom shows a participant's name on dark grey. A slide shown for
+# only 3.5 s, then the black screen Zoom shows while the next person starts sharing: the
+# slide must still be saved, and no dark screen may count as a build step of the slide
+# before it. (Sizes follow the 2026-10-13 capture: the handle is about 2 % of the width.)
+F12_W, F12_H = 1280, 720
+F12_TOP = 18                      # dark strip above the shared screen (the handle sits here)
+F12_BAR_H = 64                    # toolbar height, 9 % of the region
+F12_SCREENS = [
+    (0.0, "slide", "第 4 回 メディアデザイン", ["前回の課題を共有", "今日の流れ"]),
+    (40.0, "slide", "作りたいもの", ["個人の Web サイト", "研究ポスター"]),
+    (70.0, "tile", "田中 花子", []),
+    (90.0, "slide", "これまでの制作経験", ["研究発表のスライド", "HTML と CSS"]),
+    (93.5, "starting", "鈴木 一郎 が画面共有を開始しました", []),
+]
+F12_CONTROLS = [(15.0, 25.0), (36.0, 52.0)]
+ZOOM_DARK = (26, 26, 26)
+ZOOM_BAR = (35, 35, 35)
+ZOOM_TILE = (36, 36, 36)
+
+
+def _f12_screen(kind, title, bullets):
+    def make():
+        im = Image.new("RGB", (F12_W, F12_H), ZOOM_DARK)
+        d = ImageDraw.Draw(im)
+        if kind == "slide":
+            d.rectangle([0, F12_TOP, F12_W - 1, F12_H - 1], fill=PAPER)
+            d.text((80, F12_TOP + 50), title, font=_font(52), fill=INK)
+            for i, text in enumerate(bullets):
+                d.text((110, F12_TOP + 170 + i * 76), "・" + text, font=_font(36), fill=INK)
+            d.text((F12_W - 330, F12_H - 120), "202621720  須藤", font=_font(24), fill=INK)
+        elif kind == "starting":
+            d.rectangle([0, F12_TOP, F12_W - 1, F12_H - 1], fill=(0, 0, 0))
+            d.text((F12_W // 2 - 200, F12_H // 2 - 12), title, font=_font(24), fill=(235, 235, 235))
+        else:
+            d.rectangle([0, F12_TOP, F12_W - 1, F12_H - 1], fill=ZOOM_TILE)
+            d.rounded_rectangle([F12_W // 2 - 90, F12_H // 2 - 34, F12_W // 2 + 90, F12_H // 2 + 34],
+                                radius=12, fill=(64, 52, 48))
+            d.text((F12_W // 2 - 70, F12_H // 2 - 18), title, font=_font(30), fill=(235, 235, 235))
+        return im
+    return _cached(("f12", title), make)
+
+
+def _f12_controls(img):
+    img = img.copy()
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, F12_H - F12_BAR_H, F12_W - 1, F12_H - 1], fill=ZOOM_BAR)
+    for k, label in enumerate(["ビデオ", "参加者", "チャット", "リアクション", "共有", "詳細"]):
+        x = 60 + k * 200 if k == 0 else 420 + k * 110
+        d.rounded_rectangle([x, F12_H - 54, x + 26, F12_H - 30], radius=5, outline=(230, 230, 230), width=2)
+        d.text((x - 8, F12_H - 24), label, font=_font(13), fill=(230, 230, 230))
+    d.rounded_rectangle([F12_W // 2 - 13, 5, F12_W // 2 + 13, 10], radius=2, fill=(204, 204, 204))
+    d.polygon([(px + 760, py + 470) for px, py in ARROW], fill=(0, 0, 0), outline=(255, 255, 255))
+    return img
+
+
+def render_f12(t):
+    _, kind, title, bullets = max((x for x in F12_SCREENS if x[0] <= t), key=lambda x: x[0])
+    img = _f12_screen(kind, title, bullets)
+    if any(a <= t < b for a, b in F12_CONTROLS):
+        img = _f12_controls(img)
+    return img
+
+
 # ---------------------------------------------------------------------------
 # Registry and expectations for the chosen behaviour (DECISIONS.md, round 1):
 # moving regions masked while they move and compared again once still (R1-5 b),
@@ -673,5 +739,28 @@ FIXTURES = {
         ],
         # Each final image is without the bar: slide 2 from after the bar went away.
         "sharp_from": [0.0, 70.0, 90.0],
+    },
+    "F12": {
+        "label": "Zoom の窓：操作バーとつまみ、名前の画面（115 秒）",
+        "render": render_f12,
+        "end": 115.0,
+        "saves": [
+            ("スライド 1（バーのない版）", 0.5, 2.0),
+            ("スライド 2（バーが出た版を、消えた後の版で置き換え）", 52.5, 54.0),
+            ("名前の画面 A（スライド 2 は置き換えない）", 70.5, 72.0),
+            ("スライド 3（3.5 秒だけ表示）", 90.5, 92.0),
+            ("共有を開始する画面", 94.0, 95.5),
+        ],
+        "replaces": 1,
+        "revisits": 0,
+        "blanks": 0,
+        "quiet": [
+            ("スライド 1 の上にバーとつまみが出ている間", 2.0, 40.0),
+            ("バーが消えるまで、と消えた後", 54.0, 70.0),
+            ("名前の画面 A の間", 72.0, 90.0),
+            ("共有を開始する画面の間", 95.5, 115.0),
+        ],
+        # Each final image is without the bar: slide 2 from after the bar went away.
+        "sharp_from": [0.0, 52.0, 70.0, 90.0, 93.5],
     },
 }
