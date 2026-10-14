@@ -565,6 +565,56 @@ def render_f12(t):
     return img
 
 
+# F13: a long document scrolled in a browser (2026-10-14: "スクロールの途中"). A toolbar
+# stays at the top and the Zoom bar at the bottom; only the page between them moves. The
+# page is scrolled in steps with pauses. Positions that the next one still covers together
+# with the saved one are not saved; the first, the last, and one the next would no longer
+# cover are (everything shown stays in some saved image).
+F13_VIEW = (60, 640)          # page viewport rows (top, bottom) in the 1280x720 frame
+F13_OFFSETS = [(10.0, 0), (25.0, 130), (40.0, 270), (55.0, 430), (70.0, 650), (85.0, 720)]
+
+
+def _f13_page():
+    page = Image.new("RGB", (1280, 1600), PAPER)
+    d = ImageDraw.Draw(page)
+    y = 30
+    k = 0
+    words = ["資料", "目録", "記述", "公開", "保存", "分類", "利用", "研究"]
+    while y < 1560:
+        if k % 5 == 0:
+            d.text((90, y), f"{k // 5 + 1}. 見出し {k // 5 + 1} の段落", font=_font(34), fill=INK)
+            y += 70
+        else:
+            line = "、".join(words[(k + j) % len(words)] for j in range(3 + k % 4)) + f"について {k} 番目の説明。"
+            d.text((110, y), line, font=_font(26), fill=INK)
+            if k % 7 == 3:
+                d.rectangle([900, y - 6, 1160, y + 90], outline=INK, width=3)
+                d.rectangle([930, y + 20, 1130, y + 60], fill=(170, 190, 215))
+            y += 52
+        k += 1
+    return page
+
+
+def render_f13(t):
+    if t < 10.0 or t >= 100.0:
+        if t < 10.0:
+            return _cached(("f13", "A"), lambda: _slide("Slide A 今日の流れ", ["読む", "話し合う"])[0])
+        return _cached(("f13", "B"), lambda: _slide("Slide B まとめ", ["次回まで", "課題"])[0])
+    offset = max(o for s0, o in F13_OFFSETS if s0 <= t)
+    page = _cached(("f13", "page"), _f13_page)
+    img = Image.new("RGB", (W, H), (60, 60, 64))
+    top, bottom = F13_VIEW
+    img.paste(page.crop((0, offset, 1280, offset + bottom - top)), (0, top))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, W, top - 1], fill=(232, 232, 235))
+    d.rounded_rectangle([160, 14, 1120, 46], radius=12, fill=(255, 255, 255))
+    d.text((180, 18), "example.ac.jp/syllabus/media-design", font=_font(20), fill=(90, 90, 90))
+    d.rectangle([0, bottom, W, H], fill=(28, 28, 30))
+    for x in range(40, 1240, 120):
+        d.rounded_rectangle([x, bottom + 22, x + 60, bottom + 58], radius=8, outline=(200, 200, 200), width=2)
+    return img
+
+
 # ---------------------------------------------------------------------------
 # Registry and expectations for the chosen behaviour (DECISIONS.md, round 1):
 # moving regions masked while they move and compared again once still (R1-5 b),
@@ -762,5 +812,23 @@ FIXTURES = {
         ],
         # Each final image is without the bar: slide 2 from after the bar went away.
         "sharp_from": [0.0, 52.0, 70.0, 90.0, 93.5],
+    },
+    "F13": {
+        "label": "文書を何回かに分けてスクロール（125 秒）",
+        "render": render_f13,
+        "end": 125.0,
+        "saves": [
+            ("スライド A", 0.5, 2.0),
+            ("文書の先頭", 10.5, 12.0),
+            ("430px の位置（次の 650px は先頭とつながらない）", 55.5, 57.0),
+            ("最後の 720px の位置", 85.5, 87.0),
+            ("スライド B", 100.5, 102.0),
+        ],
+        "revisits": 0,
+        "blanks": 0,
+        "quiet": [
+            ("130px と 270px の位置（先頭と 430px で見える）", 12.0, 55.0),
+            ("650px の位置（430px と 720px で見える）", 57.0, 85.0),
+        ],
     },
 }

@@ -121,6 +121,14 @@ fn a18_f12_zoom_toolbar_and_name_screens() {
     check_fixture("F12");
 }
 
+/// A19 (2026-10-14): a document scrolled in steps between a fixed toolbar and the Zoom
+/// bar: the positions the next one still covers with the saved one are not saved; the
+/// first, the last, and the one the next would no longer cover are.
+#[test]
+fn a19_f13_scrolling_document() {
+    check_fixture("F13");
+}
+
 /// A1-A3: lecture at normal speed (7 saves, none while the video plays, one revisit).
 #[test]
 fn a1_a3_f1_lecture() {
