@@ -6945,6 +6945,8 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-positioner",
  "tempfile",
+ "webview2-com",
+ "windows-core",
  "zsp-capture",
  "zsp-detect",
  "zsp-output",

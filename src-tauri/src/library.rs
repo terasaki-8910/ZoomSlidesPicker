@@ -359,6 +359,7 @@ pub fn open_window<R: Runtime>(app: &AppHandle<R>) {
     .build() else {
         return;
     };
+    crate::windows::disable_browser_keys(&window);
 
     #[cfg(target_os = "macos")]
     {
