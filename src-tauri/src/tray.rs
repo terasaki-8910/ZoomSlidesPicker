@@ -26,6 +26,8 @@ enum Visual {
 struct MenuModel {
     lang: Lang,
     has_session: bool,
+    /// Stop requested, PDF being written: Stop is disabled.
+    stopping: bool,
     has_last: bool,
     can_rebuild: bool,
 }
@@ -36,11 +38,14 @@ pub struct Model {
     visual: Visual,
     /// Captures in the current session, while there is one.
     count: Option<usize>,
+    /// Stop requested, PDF being written (the icon shows the stopped state).
+    stopping: bool,
     menu: MenuModel,
 }
 
 impl Model {
     pub fn of(shell: &Shell) -> Self {
+        let stopping = shell.session.as_ref().is_some_and(|a| a.stopping);
         let (visual, count) = match &shell.session {
             None => (Visual::Stopped, None),
             Some(active) => {
@@ -51,10 +56,13 @@ impl Model {
                 }
             }
         };
+        let visual = if stopping { Visual::Stopped } else { visual };
         Self {
             visual,
             count,
+            stopping,
             menu: MenuModel {
+                stopping,
                 lang: settings::effective_language(shell.settings.language),
                 has_session: shell.session.is_some(),
                 has_last: shell.last_session.is_some(),
@@ -147,13 +155,19 @@ pub fn apply<R: Runtime>(app: &AppHandle<R>, model: Model) {
     // macOS shows the count as the tray title; Windows/Linux have no tray title, so the
     // count only appears in the tooltip there (SPEC.md > 使い方の流れ).
     #[cfg(target_os = "macos")]
-    if prev.map(|p| p.count) != Some(model.count) {
-        let _ = tray.set_title(model.count.map(|c| c.to_string()));
+    if prev.map(|p| (p.count, p.stopping)) != Some((model.count, model.stopping)) {
+        let title = if model.stopping {
+            Some("PDF…".to_string())
+        } else {
+            model.count.map(|c| c.to_string())
+        };
+        let _ = tray.set_title(title);
     }
 
-    let tooltip_key = |m: &Model| (m.visual, m.count, m.menu.lang);
+    let tooltip_key = |m: &Model| (m.visual, m.count, m.stopping, m.menu.lang);
     if prev.as_ref().map(tooltip_key) != Some(tooltip_key(&model)) {
         let tooltip = match (model.visual, model.count) {
+            _ if model.stopping => i18n::tooltip_stopping(model.menu.lang).to_string(),
             (Visual::Running, Some(c)) => i18n::tooltip_running(model.menu.lang, c),
             (Visual::Paused, Some(c)) => i18n::tooltip_paused(model.menu.lang, c),
             _ => i18n::tooltip_idle().to_string(),
@@ -187,7 +201,7 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, m: MenuModel) -> tauri::Result<Men
     };
     let library = item("library", i18n::tray_history(m.lang), true)?;
     let start = item("start", i18n::tray_start(m.lang), !m.has_session)?;
-    let stop = item("stop", i18n::tray_stop(m.lang), m.has_session)?;
+    let stop = item("stop", i18n::tray_stop(m.lang), m.has_session && !m.stopping)?;
     let open_folder = item(
         "open_folder",
         i18n::tray_open_folder(m.lang),

@@ -76,6 +76,14 @@ pub fn tooltip_running(lang: Lang, count: usize) -> String {
     }
 }
 
+/// Tray tooltip between the Stop request and the PDF being written.
+pub fn tooltip_stopping(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Ja => "PDF を作成中…",
+        Lang::En => "Writing the PDF…",
+    }
+}
+
 pub fn tooltip_paused(lang: Lang, count: usize) -> String {
     match lang {
         Lang::Ja => format!("一時停止中：{count} 枚"),
@@ -267,7 +275,7 @@ pub fn library_no_pdf(lang: Lang) -> &'static str {
     }
 }
 
-/// `rebuild_session_pdf`, `trash_session`, `trash_captures`, `fold_session`: the session
+/// `estimate_pdf`, `export_pdf`, `trash_session`, `trash_captures`, `fold_session`: the session
 /// is still recording. Matches `library.recordingLocked` in src/i18n/{ja,en}.ts, which the
 /// window shows inline instead -- this is the defensive command-level copy of the same
 /// wording for the rare case a stale UI still sends the request.
@@ -278,7 +286,7 @@ pub fn library_recording_locked(lang: Lang) -> &'static str {
     }
 }
 
-/// `rebuild_session_pdf`: the session has no capture images left to build a PDF from
+/// `estimate_pdf`, `export_pdf`: the session has no capture images left to build a PDF from
 /// (zsp-output's `rebuild_pdf` returns `InvalidInput`). Not covered by
 /// docs/impl/library.md's string table.
 pub fn library_no_images(lang: Lang) -> &'static str {
@@ -304,5 +312,13 @@ pub fn library_capture_not_found(lang: Lang) -> &'static str {
     match lang {
         Lang::Ja => "画像が見つかりません。",
         Lang::En => "The image was not found.",
+    }
+}
+
+/// File name (before ` YYYY-MM-DD.pdf`) of a PDF exported from chosen images.
+pub fn library_export_base_name(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Ja => "選んだ画像",
+        Lang::En => "Selected images",
     }
 }

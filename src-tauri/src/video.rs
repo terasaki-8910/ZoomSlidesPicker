@@ -125,6 +125,7 @@ pub fn extract_video<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
         interval_s,
         thumb: None,
         video_total_frames: total_frames,
+        stopping: false,
     });
     drop(shell);
 

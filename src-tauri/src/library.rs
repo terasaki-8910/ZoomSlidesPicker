@@ -564,22 +564,96 @@ pub async fn open_session_pdf(app: AppHandle, dir: String) -> Result<(), String>
     Ok(())
 }
 
+/// One entry of `estimate_pdf`'s result.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfEstimate {
+    pub quality: zsp_output::PdfQuality,
+    pub bytes: u64,
+}
+
+/// What `export_pdf` wrote.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfExport {
+    pub path: String,
+    pub pages: usize,
+    pub bytes: u64,
+}
+
+fn pdf_error(lang: Lang, e: &io::Error) -> String {
+    if e.kind() == io::ErrorKind::InvalidInput {
+        i18n::library_no_images(lang).to_string()
+    } else {
+        i18n::error_save_folder(lang, &e.to_string())
+    }
+}
+
+/// `estimate_pdf`: the size a PDF of the session's images (`indices` null: all that exist)
+/// would have at each quality, in the order lossless, standard, light.
 #[tauri::command]
-pub async fn rebuild_session_pdf(app: AppHandle, dir: String) -> Result<usize, String> {
+pub async fn estimate_pdf(
+    app: AppHandle,
+    dir: String,
+    indices: Option<Vec<usize>>,
+) -> Result<Vec<PdfEstimate>, String> {
     let lang = current_lang(&app);
     let session_dir = resolve_session_dir(&app, &dir, lang)?;
     if is_recording(&app, &session_dir) {
         return Err(i18n::library_recording_locked(lang).to_string());
     }
-    let pages = zsp_output::rebuild_pdf(&session_dir, chrono::Local::now()).map_err(|e| {
-        if e.kind() == io::ErrorKind::InvalidInput {
-            i18n::library_no_images(lang).to_string()
-        } else {
-            i18n::error_save_folder(lang, &e.to_string())
-        }
-    })?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let images = zsp_output::export_images(&session_dir, indices.as_deref())
+            .map_err(|e| pdf_error(lang, &e))?;
+        [
+            zsp_output::PdfQuality::Lossless,
+            zsp_output::PdfQuality::Standard,
+            zsp_output::PdfQuality::Light,
+        ]
+        .into_iter()
+        .map(|quality| {
+            zsp_output::estimate_pdf_bytes(&images, quality)
+                .map(|bytes| PdfEstimate { quality, bytes })
+                .map_err(|e| pdf_error(lang, &e))
+        })
+        .collect()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// `export_pdf`: `indices` null rewrites slides.pdf at `quality` (and records it in
+/// session.json); otherwise writes the chosen images as a separate PDF in the folder.
+#[tauri::command]
+pub async fn export_pdf(
+    app: AppHandle,
+    dir: String,
+    quality: zsp_output::PdfQuality,
+    indices: Option<Vec<usize>>,
+) -> Result<PdfExport, String> {
+    let lang = current_lang(&app);
+    let session_dir = resolve_session_dir(&app, &dir, lang)?;
+    if is_recording(&app, &session_dir) {
+        return Err(i18n::library_recording_locked(lang).to_string());
+    }
+    let done = tauri::async_runtime::spawn_blocking(move || {
+        zsp_output::export_pdf(
+            &session_dir,
+            quality,
+            indices.as_deref(),
+            chrono::Local::now(),
+            i18n::library_export_base_name(lang),
+        )
+        .map_err(|e| pdf_error(lang, &e))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     notify_changed(&app);
-    Ok(pages)
+    Ok(PdfExport {
+        path: ipc_types::path_to_string(&done.path),
+        pages: done.pages,
+        bytes: done.bytes,
+    })
 }
 
 #[tauri::command]

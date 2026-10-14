@@ -78,6 +78,8 @@ pub struct SessionView {
     pub blank: bool,
     /// The window is gone; the session is paused.
     pub window_lost: bool,
+    /// Stop was requested; the PDF is being written. Cleared when the session finishes.
+    pub stopping: bool,
     pub source_kind: SourceKind,
     /// Window title, or video file name.
     pub source_title: String,
