@@ -28,6 +28,13 @@ describe("shouldCancelKey", () => {
       k("Tab", { ctrlKey: true }),
       k("ArrowLeft", { altKey: true }),
       k("ArrowRight", { metaKey: true }),
+      k("h", { ctrlKey: true }),
+      k("n", { ctrlKey: true }),
+      k("t", { metaKey: true }),
+      k("N", { ctrlKey: true, shiftKey: true }),
+      k("Delete", { ctrlKey: true, shiftKey: true }),
+      k("BrowserBack"),
+      k("BrowserRefresh"),
     ];
     for (const e of cancelled) expect(shouldCancelKey(e), JSON.stringify(e)).toBe(true);
   });
@@ -98,5 +105,23 @@ describe("installBrowserGuard", () => {
     input.remove();
     area.remove();
     div.remove();
+  });
+});
+
+describe("installBrowserGuard: mouse buttons", () => {
+  it("cancels the mouse's back and forward buttons", () => {
+    const remove = installBrowserGuard(window);
+    try {
+      for (const button of [3, 4]) {
+        const e = new MouseEvent("mouseup", { button, cancelable: true });
+        window.dispatchEvent(e);
+        expect(e.defaultPrevented, `button ${button}`).toBe(true);
+      }
+      const left = new MouseEvent("mouseup", { button: 0, cancelable: true });
+      window.dispatchEvent(left);
+      expect(left.defaultPrevented).toBe(false);
+    } finally {
+      remove();
+    }
   });
 });

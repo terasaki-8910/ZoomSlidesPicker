@@ -24,11 +24,14 @@ export function isTextField(target: EventTarget | null | undefined): boolean {
 }
 
 // Cmd/Ctrl + letter that the browser claims: find, find next, downloads, print, reload,
-// view source, save, open, bookmark.
-const MOD_LETTERS = new Set(["f", "g", "j", "p", "r", "u", "s", "o", "d"]);
-// Cmd/Ctrl + Shift + letter: devtools (I, J, C), hard reload (R), print dialog (P).
-const MOD_SHIFT_LETTERS = new Set(["i", "j", "c", "r", "p"]);
+// view source, save, open, bookmark, history, new window / tab, address bar, search.
+const MOD_LETTERS = new Set(["f", "g", "j", "p", "r", "u", "s", "o", "d", "h", "n", "t", "l", "e", "k"]);
+// Cmd/Ctrl + Shift + letter: devtools (I, J, C), hard reload (R), print dialog (P),
+// private window (N), reopen tab (T), bookmarks (B, O), clear browsing data (Delete).
+const MOD_SHIFT_LETTERS = new Set(["i", "j", "c", "r", "p", "n", "t", "b", "o", "Delete"]);
 const FUNCTION_KEYS = new Set(["F3", "F5", "F7", "F12"]);
+// Dedicated keys on some keyboards.
+const BROWSER_KEYS = new Set(["BrowserBack", "BrowserForward", "BrowserRefresh", "BrowserHome", "BrowserSearch"]);
 
 /**
  * True when the browser's own handling of this key press must be cancelled. Text editing
@@ -40,7 +43,7 @@ export function shouldCancelKey(e: KeyLike): boolean {
   const mod = e.ctrlKey || e.metaKey;
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
 
-  if (FUNCTION_KEYS.has(key)) return true;
+  if (FUNCTION_KEYS.has(key) || BROWSER_KEYS.has(key)) return true;
 
   if ((e.altKey || e.metaKey) && (key === "ArrowLeft" || key === "ArrowRight") && !e.ctrlKey && !e.shiftKey) {
     return !isTextField(e.target);
@@ -72,10 +75,18 @@ export function installBrowserGuard(target: Window = window): () => void {
   function onWheel(e: WheelEvent) {
     if (e.ctrlKey || e.metaKey) e.preventDefault(); // pinch / ctrl+wheel zoom
   }
+  // The mouse's back and forward buttons navigate the webview's history.
+  function onMouseButton(e: MouseEvent) {
+    if (e.button === 3 || e.button === 4) e.preventDefault();
+  }
   target.addEventListener("keydown", onKeyDown, true);
   target.addEventListener("contextmenu", onContextMenu, true);
   target.addEventListener("wheel", onWheel, { capture: true, passive: false });
+  target.addEventListener("mouseup", onMouseButton, true);
+  target.addEventListener("auxclick", onMouseButton, true);
   return () => {
+    target.removeEventListener("mouseup", onMouseButton, true);
+    target.removeEventListener("auxclick", onMouseButton, true);
     target.removeEventListener("keydown", onKeyDown, true);
     target.removeEventListener("contextmenu", onContextMenu, true);
     target.removeEventListener("wheel", onWheel, true);
