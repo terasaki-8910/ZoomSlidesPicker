@@ -34,6 +34,13 @@
 //! (`Config::add_max_share`): against the old background, a slide giving way to a dark
 //! screen looks like content added everywhere.
 //!
+//! Scrolling (2026-10-14) is a state whose changed rows show the saved state's rows moved
+//! by one offset (`scroll_match`). Such a position is not saved at the final quiet: it waits
+//! for the next change. If that is a further scroll the same way that still overlaps the
+//! saved state, the position in between is dropped (the two cover it); otherwise it is
+//! saved. So a scrolled document keeps its first position, the last, and the ones needed
+//! so that everything shown stays in some saved image.
+//!
 //! Protocol for the caller (the session engine):
 //! - Call [`Detector::step`] once per sample, in time order, and apply the returned events
 //!   in order.
@@ -78,6 +85,27 @@ pub struct Config {
     pub edge_coverage: f64,
     pub edge_dark_floor: u8,
     pub edge_direction: f64,
+    /// Scrolling (2026-10-14): a state is the baseline scrolled when its changed rows
+    /// (mean |difference| over the row's compared cells above `scroll_row_diff`) that have
+    /// content (row standard deviation above `scroll_row_content`) match the baseline's rows
+    /// shifted by one offset of at least `scroll_min_shift` rows (steps of `scroll_step`,
+    /// rows interpolated; a row matches when its mean |difference| is at most
+    /// `scroll_row_match` and at least `scroll_cell_agree` of its cells are within
+    /// `cell_thresh`, and the row it came from changed too): at least `scroll_min_rows` rows
+    /// and `scroll_match_share` of the rows that overlap, overlapping at least
+    /// `scroll_overlap_share` of the changed content rows. At this grid size, different
+    /// lines of text look alike when barely shifted, hence the minimum shift. While the screen keeps scrolling
+    /// the same way from the saved state, the positions in between are not saved; the last
+    /// one is, and so is a position the next one would no longer cover.
+    pub scroll_row_diff: f64,
+    pub scroll_row_content: f64,
+    pub scroll_row_match: f64,
+    pub scroll_step: f64,
+    pub scroll_min_shift: f64,
+    pub scroll_cell_agree: f64,
+    pub scroll_min_rows: usize,
+    pub scroll_match_share: f64,
+    pub scroll_overlap_share: f64,
     /// Per-cell |difference| (0-255) that counts as a changed cell (strictly greater).
     pub cell_thresh: i32,
     /// Share of compared cells changed => a real change (strictly greater).
@@ -161,6 +189,15 @@ impl Default for Config {
             edge_coverage: 0.5,
             edge_dark_floor: 40,
             edge_direction: 0.85,
+            scroll_row_diff: 4.0,
+            scroll_row_content: 8.0,
+            scroll_row_match: 5.0,
+            scroll_step: 0.25,
+            scroll_min_shift: 2.0,
+            scroll_cell_agree: 0.95,
+            scroll_min_rows: 5,
+            scroll_match_share: 0.75,
+            scroll_overlap_share: 0.15,
             cell_thresh: 12,
             change_thresh: 0.002,
             removed_thresh: 0.001,
@@ -388,6 +425,139 @@ fn edge_band_overlay(
     } else {
         None
     }
+}
+
+/// `new` as `base` scrolled (`Config::scroll_row_diff` and the fields after it).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ScrollMatch {
+    /// `new` row `y` shows what `base` showed at row `y + dy`.
+    dy: f64,
+    /// Changed content rows of `new` that `base` did not show: newly revealed content.
+    new_rows: usize,
+}
+
+fn scroll_match(base: &Grid, new: &Grid, keep: &[bool], cfg: &Config) -> Option<ScrollMatch> {
+    let (w, h) = (base.width, base.height);
+    if h < 8 || w == 0 {
+        return None;
+    }
+    let b: Vec<f32> = base.data.iter().map(|&v| v as f32).collect();
+    let n: Vec<f32> = new.data.iter().map(|&v| v as f32).collect();
+    // Per row: the compared columns (a row mostly masked out is not used).
+    let cols: Vec<Vec<usize>> = (0..h)
+        .map(|y| (0..w).filter(|&x| keep[y * w + x]).collect())
+        .collect();
+    let usable = |y: usize| cols[y].len() * 2 >= w;
+    let in_place_diff = |y: usize| -> f32 {
+        cols[y]
+            .iter()
+            .map(|&x| (n[y * w + x] - b[y * w + x]).abs())
+            .sum::<f32>()
+            / cols[y].len() as f32
+    };
+    let has_content = |y: usize| -> bool {
+        let len = cols[y].len() as f32;
+        let mean = cols[y].iter().map(|&x| n[y * w + x]).sum::<f32>() / len;
+        let var = cols[y]
+            .iter()
+            .map(|&x| (n[y * w + x] - mean).powi(2))
+            .sum::<f32>()
+            / len;
+        var.sqrt() as f64 > cfg.scroll_row_content
+    };
+    // Rows that changed in place. In a scroll, the content a row now shows has left the row
+    // it came from too; a build or a new slide that merely looks like shifted rows leaves
+    // its look-alike source in place.
+    let changed0: Vec<bool> = (0..h)
+        .map(|y| usable(y) && in_place_diff(y) as f64 > cfg.scroll_row_diff)
+        .collect();
+    // Rows at the edge of a moving region mix it with what stays (a toolbar) in the grid.
+    let interior = |y: usize| y > 0 && y + 1 < h && changed0[y - 1] && changed0[y + 1];
+    let candidates: Vec<usize> = (0..h)
+        .filter(|&y| changed0[y] && interior(y) && has_content(y))
+        .collect();
+    if candidates.len() < cfg.scroll_min_rows {
+        return None;
+    }
+    let cell_thresh = cfg.cell_thresh as f32;
+    // Whether `new` row `y` shows `base` at the fractional row `y + dy` (interpolated),
+    // or `None` when that row is outside `base`.
+    let row_matches = |y: usize, dy: f64| -> Option<bool> {
+        let pos = y as f64 + dy;
+        if pos < 0.0 || pos > (h - 1) as f64 {
+            return None;
+        }
+        let y0 = pos.floor() as usize;
+        let y1 = (y0 + 1).min(h - 1);
+        // A source row that did not move is fixed (a toolbar) or a look-alike left in place:
+        // it neither counts against the match nor for it.
+        if !(changed0[y0] || changed0[y1]) {
+            return None;
+        }
+        let f = (pos - y0 as f64) as f32;
+        let (mut sum, mut close) = (0f32, 0usize);
+        for &x in &cols[y] {
+            let src = b[y0 * w + x] * (1.0 - f) + b[y1 * w + x] * f;
+            let d = (n[y * w + x] - src).abs();
+            sum += d;
+            if d <= cell_thresh {
+                close += 1;
+            }
+        }
+        let len = cols[y].len();
+        Some(
+            (sum / len as f32) as f64 <= cfg.scroll_row_match
+                && close as f64 >= cfg.scroll_cell_agree * len as f64,
+        )
+    };
+    let count = |dy: f64| -> (usize, usize) {
+        let (mut matched, mut overlapping) = (0usize, 0usize);
+        for &y in &candidates {
+            if let Some(m) = row_matches(y, dy) {
+                overlapping += 1;
+                matched += m as usize;
+            }
+        }
+        (matched, overlapping)
+    };
+    // Every whole-row offset, then a finer search around the best few. An offset is ranked
+    // by its matching rows less its mismatching ones: a wrong offset that happens to match a
+    // few rows of many is worse than the right one with a small overlap.
+    let score =
+        |(matched, overlapping): (usize, usize)| -> i64 { 2 * matched as i64 - overlapping as i64 };
+    // Half-row steps: the content seldom moves by whole grid rows, and at the wrong phase
+    // the rows do not agree cell by cell.
+    let limit = (h - cfg.scroll_min_rows) as i64 * 2;
+    let mut coarse: Vec<(i64, f64)> = (-limit..=limit)
+        .map(|k| k as f64 / 2.0)
+        .filter(|dy| dy.abs() >= cfg.scroll_min_shift)
+        .filter_map(|dy| {
+            let (matched, overlapping) = count(dy);
+            (overlapping >= cfg.scroll_min_rows).then_some((score((matched, overlapping)), dy))
+        })
+        .collect();
+    coarse.sort_by_key(|c| std::cmp::Reverse(c.0));
+    let mut best: Option<(i64, usize, usize, f64)> = None; // (score, matched, overlapping, dy)
+    for &(_, dy0) in coarse.iter().take(3) {
+        for dy in [dy0 - 0.25, dy0, dy0 + 0.25] {
+            if dy.abs() >= cfg.scroll_min_shift {
+                let (matched, overlapping) = count(dy);
+                let sc = score((matched, overlapping));
+                if best.is_none_or(|(b, _, _, _)| sc > b) {
+                    best = Some((sc, matched, overlapping, dy));
+                }
+            }
+        }
+    }
+    let best = best.map(|(_, m, o, dy)| (m, o, dy));
+    let (matched, overlapping, dy) = best?;
+    let ok = matched >= cfg.scroll_min_rows
+        && matched as f64 >= cfg.scroll_match_share * overlapping as f64
+        && overlapping as f64 >= cfg.scroll_overlap_share * candidates.len() as f64;
+    ok.then_some(ScrollMatch {
+        dy,
+        new_rows: candidates.len() - matched,
+    })
 }
 
 /// How far around a cluster of changed cells its background is looked for.
@@ -649,6 +819,9 @@ struct Pending {
     held_t: f64,
     /// Mean detail of the held frame, for comparing against new candidates.
     held_sharp: f64,
+    /// When this state is the baseline scrolled: by how many rows (positive: the content
+    /// moved up, the view went down).
+    scroll_dy: Option<f64>,
 }
 
 /// The save decision state machine. See the module docs for the caller protocol.
@@ -756,12 +929,13 @@ impl Detector {
         let same =
             |g: &Grid| changed_frac(&pending.grid.data, &g.data, keep, thresh) <= change_thresh;
         let overlay = |g: &Grid| edge_overlay(g, &pending.grid, keep, &cfg);
-        // The baseline, or the baseline with a player's control bar over it (R4-4).
-        if self
-            .last_saved
-            .as_ref()
-            .is_some_and(|b| same(b) || overlay(b) == Some(Overlay::Shown))
-        {
+        // The baseline, or the baseline with a player's control bar over it (R4-4), or the
+        // baseline scrolled without showing anything new.
+        if self.last_saved.as_ref().is_some_and(|b| {
+            same(b)
+                || overlay(b) == Some(Overlay::Shown)
+                || scroll_match(b, &pending.grid, keep, &cfg).is_some_and(|m| m.new_rows == 0)
+        }) {
             return;
         }
         let versions = self
@@ -896,11 +1070,17 @@ impl Detector {
                 }
             }
         }
+        let scroll_dy = self
+            .last_saved
+            .as_ref()
+            .and_then(|base| scroll_match(base, &grid, &masks.keep_firm, &self.cfg))
+            .map(|m| m.dy);
         self.pending = Some(Pending {
             t,
             grid,
             held_t: t,
             held_sharp: sharp,
+            scroll_dy,
         });
         events.push(Event::Hold { t });
     }
@@ -1153,7 +1333,25 @@ impl Detector {
                 Some(mut p) => {
                     let differs = changed_frac(&grid.data, &p.grid.data, firm, cfg.cell_thresh)
                         > cfg.change_thresh;
-                    if differs {
+                    // Still scrolling the same way from the saved state: the position in
+                    // between is covered by the saved one and this one, so it is dropped.
+                    let continued = differs
+                        && p.scroll_dy.is_some_and(|pdy| {
+                            self.last_saved
+                                .as_ref()
+                                .and_then(|base| scroll_match(base, grid, firm, &cfg))
+                                .is_some_and(|m| {
+                                    m.dy.signum() == pdy.signum() && m.dy.abs() >= pdy.abs()
+                                })
+                        });
+                    // A control bar shown over the pending state: keep the picture without it.
+                    let bar_over_pending =
+                        differs && edge_overlay(&p.grid, grid, firm, &cfg) == Some(Overlay::Shown);
+                    if bar_over_pending {
+                        self.pending = Some(p);
+                    } else if continued {
+                        self.start_pending(t, grid.clone(), sharp, &masks, &mut events);
+                    } else if differs {
                         let kinds = cell_change_kinds(&p.grid, grid, keep, &cfg);
                         let sharpened = sharp >= p.held_sharp * cfg.refine_ratio
                             && coarse_removed_frac(&p.grid, grid, keep, &cfg) < cfg.removed_thresh
@@ -1200,8 +1398,10 @@ impl Detector {
             }
         }
 
+        // A scroll position waits for the next change: it may still be scrolled past.
         if let Some(p) = &self.pending
             && quiet_for >= cfg.final_quiet_s
+            && p.scroll_dy.is_none()
         {
             // Differs from the baseline only where something moved recently: a video that
             // stopped, or a camera tile that paused and may move again. Wait longer.
