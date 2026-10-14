@@ -1,0 +1,57 @@
+.update-title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.update-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.update-text p {
+  margin: 0;
+}
+
+.update-current {
+  color: var(--color-text-secondary);
+}
+
+.update-line {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.update-note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.update-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+}
+
+.update-bar-fill {
+  height: 100%;
+  background: var(--color-accent);
+}
+
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+/* Skip sits alone on the left; Later and Update now stay together on the right. */
+.update-skip {
+  margin-right: auto;
+}

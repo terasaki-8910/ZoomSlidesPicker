@@ -48,6 +48,14 @@ export function createIpcMock() {
     openCapture: vi.fn(),
     onLibraryChanged: vi.fn(),
     thumbUrl: vi.fn(),
+    // In-app updates: harmless defaults so views that are not about updates need no setup.
+    getAppVersion: vi.fn(() => Promise.resolve("0.1.6")),
+    getUpdateOffer: vi.fn(() => Promise.resolve(null)),
+    checkUpdate: vi.fn(),
+    answerUpdate: vi.fn(() => Promise.resolve()),
+    installUpdate: vi.fn(),
+    onUpdateOffer: vi.fn(() => Promise.resolve(() => {})),
+    onUpdateProgress: vi.fn(() => Promise.resolve(() => {})),
   };
 }
 

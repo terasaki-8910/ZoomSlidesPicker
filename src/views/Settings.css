@@ -93,3 +93,23 @@
 .settings-status.is-error {
   color: var(--color-danger);
 }
+
+/* The version text takes the row's left side; the check button stays on the right. */
+.settings-version {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--color-text-secondary);
+}
+
+
+/* Reserves its line so the result appearing does not shift the sections below. */
+.settings-update-line {
+  margin: 0;
+  min-height: 1.4em;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.settings-update-line.is-error {
+  color: var(--color-danger);
+}

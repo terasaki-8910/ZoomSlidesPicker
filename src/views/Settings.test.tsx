@@ -113,3 +113,85 @@ describe("Settings", () => {
     await expectNoAxeViolations(container);
   });
 });
+
+// ACCEPTANCE C22 -- docs/impl/updates.md > UI > Settings.
+describe("Settings update check", () => {
+  function setupUpdate() {
+    setup();
+    vi.mocked(ipc.getAppVersion).mockResolvedValue("0.1.6");
+    vi.mocked(ipc.getAppState).mockResolvedValue({
+      session: null,
+      lastSession: null,
+      permission: { granted: true, platform: "macos" },
+      videoProgress: null,
+    });
+    vi.mocked(ipc.onAppState).mockResolvedValue(() => {});
+    vi.mocked(ipc.answerUpdate).mockResolvedValue(undefined);
+  }
+
+  it("shows the running version", async () => {
+    setupUpdate();
+    render(<Settings />);
+    expect(await screen.findByText("バージョン 0.1.6")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "アップデートを確認" })).toBeEnabled();
+  });
+
+  it("disables the button while checking", async () => {
+    setupUpdate();
+    let resolve!: (v: { current: string; available: null; skipped: boolean }) => void;
+    vi.mocked(ipc.checkUpdate).mockReturnValue(new Promise((r) => (resolve = r)));
+    const user = userEvent.setup();
+    render(<Settings />);
+    const button = await screen.findByRole("button", { name: "アップデートを確認" });
+    await user.click(button);
+    expect(button).toBeDisabled();
+    expect(screen.getByText("確認しています…")).toBeInTheDocument();
+    resolve({ current: "0.1.6", available: null, skipped: false });
+    expect(await screen.findByText("最新の版です。")).toBeInTheDocument();
+    expect(button).toBeEnabled();
+  });
+
+  it("an available version opens the dialog and says so; Later just closes it", async () => {
+    setupUpdate();
+    vi.mocked(ipc.checkUpdate).mockResolvedValue({
+      current: "0.1.6",
+      available: { version: "0.2.0", current: "0.1.6" },
+      skipped: false,
+    });
+    const user = userEvent.setup();
+    render(<Settings />);
+    await user.click(await screen.findByRole("button", { name: "アップデートを確認" }));
+    expect(await screen.findByRole("heading", { name: "新しい版があります" })).toBeInTheDocument();
+    expect(screen.getAllByText("0.2.0 があります。")).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "後で" }));
+    expect(ipc.answerUpdate).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("0.2.0 があります。")).toBeInTheDocument();
+  });
+
+  it("a skipped version still opens the dialog, the line says it is skipped, and Skip answers skip", async () => {
+    setupUpdate();
+    vi.mocked(ipc.checkUpdate).mockResolvedValue({
+      current: "0.1.6",
+      available: { version: "0.2.0", current: "0.1.6" },
+      skipped: true,
+    });
+    const user = userEvent.setup();
+    render(<Settings />);
+    await user.click(await screen.findByRole("button", { name: "アップデートを確認" }));
+    await screen.findByRole("dialog");
+    expect(screen.getByText("0.2.0 はスキップしています。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "この版をスキップ" }));
+    expect(ipc.answerUpdate).toHaveBeenCalledWith("skip");
+  });
+
+  it("an error shows the reason", async () => {
+    setupUpdate();
+    vi.mocked(ipc.checkUpdate).mockRejectedValue(new Error("offline"));
+    const user = userEvent.setup();
+    render(<Settings />);
+    await user.click(await screen.findByRole("button", { name: "アップデートを確認" }));
+    expect(await screen.findByText("確認できませんでした：offline")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});

@@ -13,6 +13,7 @@ import {
 import Button from "../components/Button";
 import ContextMenu, { type ContextMenuItem } from "../components/ContextMenu";
 import ExportPdfDialog from "../components/ExportPdfDialog";
+import UpdateDialog from "../components/UpdateDialog";
 import IconButton from "../components/IconButton";
 import Modal from "../components/Modal";
 import Notice from "../components/Notice";
@@ -25,6 +26,8 @@ import {
   getSession,
   listSessions,
   onAppState,
+  getUpdateOffer,
+  onUpdateOffer,
   onLibraryChanged,
   openCapture,
   openPermissionSettings,
@@ -41,7 +44,7 @@ import {
   trashCaptures,
   trashSession,
 } from "../ipc";
-import type { AppState, Lang, PdfExport, SessionDetail, SessionSummary } from "../ipc/types";
+import type { AppState, Lang, PdfExport, SessionDetail, SessionSummary, UpdateInfo } from "../ipc/types";
 import { formatBytes, formatDuration, formatElapsed, formatSessionRange, formatSessionStart, sessionDateSearchForms } from "../lib/format";
 import "./Library.css";
 
@@ -143,6 +146,7 @@ export default function Library() {
   const [notice, setNotice] = useState<ActionNotice | null>(null);
   const [exportTarget, setExportTarget] = useState<ExportTarget | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [updateOffer, setUpdateOffer] = useState<UpdateInfo | null>(null);
 
   const selectedDirRef = useRef<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -163,6 +167,25 @@ export default function Library() {
     let unlisten: (() => void) | undefined;
     onAppState((s) => {
       if (active) setAppState(s);
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, []);
+
+  // ---- update offer (docs/impl/updates.md): the launch check's find, asked for on mount
+  // and pushed by `update-offer` if it arrives later.
+  useEffect(() => {
+    let active = true;
+    getUpdateOffer().then((info) => {
+      if (active && info) setUpdateOffer(info);
+    });
+    let unlisten: (() => void) | undefined;
+    onUpdateOffer((info) => {
+      if (active) setUpdateOffer(info);
     }).then((u) => {
       unlisten = u;
     });
@@ -945,6 +968,8 @@ export default function Library() {
           onDone={handleExportDone}
         />
       )}
+
+      {updateOffer && <UpdateDialog info={updateOffer} answerLater onClose={() => setUpdateOffer(null)} />}
 
       {renderMenu()}
     </div>
