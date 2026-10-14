@@ -51,6 +51,38 @@ for (const theme of THEMES) {
       await page.getByRole("checkbox").first().waitFor();
       await checkAndScreenshot(page, `select-${theme}`);
     });
+
+    test("export dialog open", async ({ page }) => {
+      await page.goto("/?preset=stopped#/library");
+      await page.getByTestId("library-root").waitFor();
+      await selectSession(page);
+      await page.getByRole("button", { name: "PDF を書き出す…" }).click();
+      await page.getByRole("dialog").waitFor();
+      await expect(page.getByText("約 50 MB")).toBeVisible(); // 36 pages x 1.4 MB
+      await checkAndScreenshot(page, `export-${theme}`);
+    });
+
+    test("context menu open", async ({ page }) => {
+      await page.goto("/?preset=stopped#/library");
+      await page.getByTestId("library-root").waitFor();
+      await selectSession(page);
+      await page.getByRole("option", { name: /第1回授業スライド\.mp4/ }).click({ button: "right" });
+      await page.getByRole("menu").waitFor();
+      await checkAndScreenshot(page, `menu-${theme}`);
+    });
+
+    test("range selection", async ({ page }) => {
+      await page.goto("/?preset=stopped#/library");
+      await page.getByTestId("library-root").waitFor();
+      await selectSession(page);
+      await page.getByRole("button", { name: "画像を選ぶ" }).click();
+      const boxes = page.getByRole("checkbox");
+      await boxes.nth(2).click();
+      await boxes.nth(7).click({ modifiers: ["Shift"] });
+      await expect(page.locator(".library-tile-check:checked")).toHaveCount(6);
+      if (theme === "light") await checkAndScreenshot(page, "select-range-light");
+      else expect(await horizontalOverflowPx(page)).toBeLessThanOrEqual(0);
+    });
   });
 
   test.describe(`library, 760x600 (${theme})`, () => {
@@ -61,6 +93,23 @@ for (const theme of THEMES) {
       await page.getByTestId("library-root").waitFor();
       await selectSession(page);
       await checkAndScreenshot(page, `a-narrow-${theme}`);
+    });
+
+    test("select mode, export and menu at the narrow size", async ({ page }) => {
+      await page.goto("/?preset=stopped#/library");
+      await page.getByTestId("library-root").waitFor();
+      await selectSession(page);
+      await page.getByRole("button", { name: "画像を選ぶ" }).click();
+      await page.getByRole("checkbox").nth(1).click();
+      await checkAndScreenshot(page, `select-narrow-${theme}`);
+      await page.getByRole("button", { name: "選んだ画像で PDF を書き出す…" }).click();
+      await page.getByRole("dialog").waitFor();
+      await checkAndScreenshot(page, `export-narrow-${theme}`);
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", { name: "やめる" }).click();
+      await page.getByRole("option", { name: /第1回授業スライド\.mp4/ }).click({ button: "right" });
+      await page.getByRole("menu").waitFor();
+      await checkAndScreenshot(page, `menu-narrow-${theme}`);
     });
   });
 }
