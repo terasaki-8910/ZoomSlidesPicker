@@ -111,13 +111,6 @@ security import cert.p12 -k ~/Library/Keychains/login.keychain-db -P <一時的�
 rm key.pem cert.p12
 ```
 
-Mac の DMG（`CARGO_TARGET_DIR=$PWD/target-dmg pnpm tauri build --bundles dmg`）と、上のインストーラーを作ってから:
+リリースは `bash scripts/release.sh <版> <変更点のメモ.md>` で行う（docs/impl/updates.md > Release side）。Mac の DMG と更新ファイル、Windows のインストーラーを、更新の署名の鍵（`~/.tauri/zoomslidespicker-updater.key`、パスワードはキーチェーンの `zoomslidespicker-updater-key`）でビルドし、`latest.json` を書き、このリポジトリ（タグ、push、Releases）と公開の配布用リポジトリ `terasaki-8910/ZoomSlidesPicker-releases`（アプリが読む `latest.json` と更新ファイル）に置く。`ZSP_RELEASE_DRY_RUN=1` を付けると、ビルドと `latest.json` だけで止まる。
 
-```sh
-git tag -a v<版> -m "ZoomSlidesPicker <版>"
-git push origin main && git push origin v<版>
-gh release create v<版> target-dmg/release/bundle/dmg/ZoomSlidesPicker_<版>_aarch64.dmg \
-  target/x86_64-pc-windows-msvc/release/bundle/nsis/ZoomSlidesPicker_<版>_x64-setup.exe \
-  --title "ZoomSlidesPicker <版>" --notes-file <変更点のメモ>
-```
-
+更新の鍵を使わずにビルドするとき（確認用）は、`pnpm tauri build --config src-tauri/tauri.local.conf.json`（更新ファイルを作らない）。

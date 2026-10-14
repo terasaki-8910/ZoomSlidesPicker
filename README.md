@@ -55,7 +55,9 @@
 
 ## 入手
 
-[GitHub Releases](https://github.com/terasaki-8910/ZoomSlidesPicker/releases) に Mac（Apple シリコン）の DMG と Windows（x64）のインストーラーを置いている。
+公開の配布用リポジトリ [ZoomSlidesPicker-releases](https://github.com/terasaki-8910/ZoomSlidesPicker-releases/releases/latest) に、Mac（Apple シリコン）の DMG と Windows（x64）のインストーラーを置いている（このリポジトリの Releases にも置く）。
+
+0.1.7 からは、起動するたびに新しい版を確かめ、見つかれば履歴の窓に「新しい版があります」が出る（今すぐ更新、後で、この版をスキップ）。設定の一般の「アップデートを確認」でも確かめられる。記録中は更新できない。0.1.6 以前から 0.1.7 へは、手で 1 回入れ替える。
 
 ## 既知の制約
 
