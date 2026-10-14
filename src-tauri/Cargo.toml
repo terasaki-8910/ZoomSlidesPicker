@@ -41,5 +41,12 @@ base64 = "0.22"
 # asset protocol decodes its request paths.
 percent-encoding = "2"
 
+# Turns off WebView2's browser shortcuts (Ctrl+J and the like) on Windows
+# (docs/impl/library.md > Browser behaviour off in every window); tauri does not
+# expose that setting.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows-core = "0.62"
+
 [dev-dependencies]
 tempfile = { workspace = true }

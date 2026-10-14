@@ -97,7 +97,8 @@
           "properties": {
             "file": { "const": "slides.pdf" },
             "pages": { "type": "integer", "minimum": 1 },
-            "rebuilt_at": { "oneOf": [{ "$ref": "#/$defs/time" }, { "type": "null" }] }
+            "rebuilt_at": { "oneOf": [{ "$ref": "#/$defs/time" }, { "type": "null" }] },
+            "quality": { "enum": ["lossless", "standard", "light"], "description": "How the images are embedded; absent in older files (read as lossless)." }
           }
         }
       ]

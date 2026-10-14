@@ -39,8 +39,25 @@ pub fn undo_last<R: Runtime>(app: &AppHandle<R>) {
 /// instantly (the engine checks for one before every wait), so there is nothing to wait
 /// for here. Only app quit needs a hard guarantee that the write finished before the
 /// process exits; that path sends `Stop` and joins explicitly (`lib.rs`).
+///
+/// Marks the session `stopping` first and syncs right away, so the tray and the windows show
+/// "writing the PDF" without waiting for the session thread; `Finished` clears the session.
 pub fn stop<R: Runtime>(app: &AppHandle<R>) {
-    send_control(app, Control::Stop);
+    let found = {
+        let shell = app.state::<SharedShell>();
+        let mut shell = shell.lock().unwrap();
+        match shell.session.as_mut() {
+            Some(active) => {
+                active.stopping = true;
+                active.handle.send(Control::Stop);
+                true
+            }
+            None => false,
+        }
+    };
+    if found {
+        ui::sync(app);
+    }
 }
 
 /// `open_folder`: the current session folder, else the last session's (docs/impl/ipc.md).

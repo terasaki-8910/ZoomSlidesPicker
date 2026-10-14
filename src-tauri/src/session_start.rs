@@ -98,6 +98,7 @@ pub fn start<R: Runtime>(
         interval_s,
         thumb: None,
         video_total_frames: None,
+        stopping: false,
     });
     shell.pending_region = None; // the snapshot (a few MB) is no longer needed
     drop(shell);

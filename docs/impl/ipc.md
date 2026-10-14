@@ -41,6 +41,7 @@ interface SessionView {
   elapsedS: number;
   blank: boolean;                // single-colour screen for 10 s or more
   windowLost: boolean;           // the window is gone; the session is paused
+  stopping: boolean;             // Stop was requested; the PDF is being written (until Finished clears the session)
   sourceKind: "window" | "mp4";
   sourceTitle: string;           // window title, or video file name
 }
@@ -121,6 +122,12 @@ Thumbnails: the UI never gets image bytes through commands. `thumbUrl(path)` in
 `src/ipc/index.ts` returns `convertFileSrc(path, "zspthumb") + "?w=" + width` (Tauri builds
 `zspthumb://localhost/...` on macOS and `http://zspthumb.localhost/...` on Windows).
 
+```ts
+type PdfQuality = "lossless" | "standard" | "light";
+interface PdfEstimate { quality: PdfQuality; bytes: number }
+interface PdfExport { path: string; pages: number; bytes: number }
+```
+
 ## Commands
 
 Invoke names are snake_case; argument keys are camelCase (Tauri converts). Errors are
@@ -138,9 +145,9 @@ returned as a string message (in the effective language) and shown by the UI as 
 | `get_region_snapshot` | | `Snapshot` | The snapshot taken by `begin_region`. |
 | `start_session` | `windowId: number, region: RegionSel` | | Validates the region, starts capturing, closes the region window, sends the start notification. Error if a session is already running, permission is missing, or the window or save folder is unusable; the region window then stays open to show it. |
 | `cancel_region` | | | Closes the region window. |
-| `pause_session`, `resume_session`, `save_now`, `undo_last`, `stop_session` | | | Session controls; no-ops when they do not apply. `stop_session` writes the PDF and sends the stop notification. |
+| `pause_session`, `resume_session`, `save_now`, `undo_last`, `stop_session` | | | Session controls; no-ops when they do not apply. `stop_session` sets `session.stopping` at once (and syncs), then the session writes a `standard` PDF and sends the stop notification. |
 | `open_folder` | | | Opens the current session folder, else the last session folder. |
-| `rebuild_pdf` | | `number` | Rebuilds the last session's PDF (zsp-output `rebuild_pdf`); returns the page count, which also becomes `lastSession.count`. Error when there is no last session or no images. |
+| `rebuild_pdf` | | `number` | Rebuilds the last session's PDF (zsp-output `rebuild_pdf`) at the quality recorded in its session.json (`standard` when it had no PDF); returns the page count, which also becomes `lastSession.count`. Error when there is no last session or no images. |
 | `extract_video` | | | Native file dialog (mp4, mov, m4v), then processes the video like a session (full frame, video time); progress in `AppState.videoProgress`. Error when ffmpeg is not on PATH. |
 | `request_permission` | | `boolean` | macOS: asks for Screen Recording permission (system prompt once); returns whether granted now. |
 | `open_permission_settings` | | | macOS: opens the Screen Recording page of System Settings. |
@@ -160,7 +167,8 @@ found.`:
 | `get_session` | `dir: string` | `SessionDetail` | |
 | `open_session_folder` | `dir` | | Opens the folder with the OS (opener). |
 | `open_session_pdf` | `dir` | | Opens slides.pdf; error `PDF がありません。` / `There is no PDF.` when missing. |
-| `rebuild_session_pdf` | `dir` | `number` | zsp-output `rebuild_pdf`; returns the page count. Error while recording. |
+| `estimate_pdf` | `dir, indices: number[] \| null` | `PdfEstimate[]` | Predicted PDF size at each quality, in the order lossless, standard, light (zsp-output `estimate_pdf_bytes`: up to 8 evenly spaced images encoded, scaled by count). `indices` null: every existing capture. Error while recording or when no image exists. |
+| `export_pdf` | `dir, quality: PdfQuality, indices: number[] \| null` | `PdfExport` | `indices` null: rewrites slides.pdf at `quality` and updates session.json `pdf` (`pages`, `rebuilt_at`, `quality`). Otherwise writes `選んだ画像 YYYY-MM-DD.pdf` / `Selected images YYYY-MM-DD.pdf` (effective language; the date is the session's start date; ` 2`, ` 3`... before `.pdf` when taken) in the folder, in index order, and leaves session.json alone. Only images that still exist count. Error while recording or when none exists. Emits `library-changed`. Runs off the async worker. |
 | `rename_session` | `dir, title: string \| null` | | Writes `title` to meta.json (trimmed; empty or null clears it). Allowed while recording. |
 | `set_session_memo` | `dir, memo: string` | | Writes `memo` to meta.json. Allowed while recording. |
 | `trash_session` | `dir` | | Moves the folder to the OS trash. Error while recording. Clears `lastSession` if it pointed there. |

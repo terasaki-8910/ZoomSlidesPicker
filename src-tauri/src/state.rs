@@ -28,6 +28,8 @@ pub struct ActiveSession {
     /// Mp4 sessions only: the frame count known from the video's duration via ffprobe,
     /// when available (docs/impl/shell.md > extract_video).
     pub video_total_frames: Option<u64>,
+    /// Stop was requested and the session is still writing its PDF.
+    pub stopping: bool,
 }
 
 pub struct LastSessionInfo {
@@ -121,6 +123,7 @@ pub fn snapshot(shell: &Shell) -> AppState {
             elapsed_s: status.elapsed_s,
             blank: status.blank,
             window_lost: status.window_lost,
+            stopping: active.stopping,
             source_kind: active.source_kind,
             source_title: active.source_title.clone(),
         }

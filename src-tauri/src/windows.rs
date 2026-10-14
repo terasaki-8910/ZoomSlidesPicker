@@ -48,6 +48,33 @@ fn in_blur_grace() -> bool {
             .is_some_and(|at| at.elapsed() < PANEL_BLUR_GRACE)
 }
 
+/// Turns off WebView2's browser accelerator keys (Ctrl+J downloads, Ctrl+P print, F5,
+/// F12, ...) for a new window (docs/impl/library.md > Browser behaviour off in every
+/// window). Other platforms have no such keys at the webview level; the page's own key
+/// guard (src/lib/browserGuard.ts) covers the rest.
+pub fn disable_browser_keys<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+    #[cfg(windows)]
+    let _ = window.with_webview(|webview| {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+        use windows_core::Interface;
+        // SAFETY: the controller belongs to this live webview and the call runs on its
+        // thread (with_webview runs the closure on the main thread).
+        unsafe {
+            let result = webview
+                .controller()
+                .CoreWebView2()
+                .and_then(|core| core.Settings())
+                .and_then(|settings| settings.cast::<ICoreWebView2Settings3>())
+                .and_then(|settings| settings.SetAreBrowserAcceleratorKeysEnabled(false));
+            if let Err(e) = result {
+                eprintln!("could not turn off browser keys: {e}");
+            }
+        }
+    });
+    #[cfg(not(windows))]
+    let _ = window;
+}
+
 fn effective_lang<R: Runtime>(app: &AppHandle<R>) -> Lang {
     let shell = app.state::<SharedShell>();
     let language = shell.lock().unwrap().settings.language;
@@ -87,6 +114,7 @@ pub fn open_panel<R: Runtime>(app: &AppHandle<R>) {
     .build() else {
         return;
     };
+    disable_browser_keys(&window);
 
     // Built hidden so the positioner can place it before it is ever shown (avoids a
     // flash at the window's default spawn position). The tray position is known only
@@ -144,6 +172,7 @@ fn open_region<R: Runtime>(app: &AppHandle<R>) {
     .build() else {
         return;
     };
+    disable_browser_keys(&window);
 
     // Closed by its title bar button rather than Cancel: drop the snapshot too.
     let app = app.clone();
@@ -168,7 +197,7 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>) {
         let _ = w.set_focus();
         return;
     }
-    let _ = WebviewWindowBuilder::new(
+    let Ok(window) = WebviewWindowBuilder::new(
         app,
         SETTINGS_LABEL,
         WebviewUrl::App("index.html#/settings".into()),
@@ -176,7 +205,10 @@ pub fn open_settings<R: Runtime>(app: &AppHandle<R>) {
     .title(i18n::title_settings(effective_lang(app)))
     .inner_size(560.0, 560.0)
     .center()
-    .build();
+    .build() else {
+        return;
+    };
+    disable_browser_keys(&window);
 }
 
 /// Resizes the panel to fit its content (docs/impl/ipc.md > fit_panel), clamped to
