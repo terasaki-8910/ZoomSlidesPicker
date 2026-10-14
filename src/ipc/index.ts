@@ -9,7 +9,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import * as mock from "./mock";
-import type { AppState, PdfEstimate, PdfExport, PdfQuality, RegionSel, SessionDetail, SessionSummary, Settings, SettingsView, Snapshot, WindowEntry } from "./types";
+import type { AppState, PdfEstimate, PdfExport, PdfQuality, RegionSel, SessionDetail, SessionSummary, Settings, SettingsView, Snapshot, UpdateAnswer, UpdateCheck, UpdateInfo, UpdateProgress, WindowEntry } from "./types";
 
 const useMock = import.meta.env.VITE_IPC_MOCK === "1";
 
@@ -180,4 +180,34 @@ export function onLibraryChanged(cb: () => void): Promise<UnlistenFn> {
  */
 export function thumbUrl(path: string, width: number): string {
   return useMock ? mock.thumbUrl(path, width) : `${convertFileSrc(path, "zspthumb")}?w=${width}`;
+}
+
+// ---- In-app updates: docs/impl/updates.md > Commands and Events.
+export function getAppVersion(): Promise<string> {
+  return useMock ? mock.getAppVersion() : invoke("get_app_version");
+}
+
+export function getUpdateOffer(): Promise<UpdateInfo | null> {
+  return useMock ? mock.getUpdateOffer() : invoke("get_update_offer");
+}
+
+export function checkUpdate(): Promise<UpdateCheck> {
+  return useMock ? mock.checkUpdate() : invoke("check_update");
+}
+
+export function answerUpdate(answer: UpdateAnswer): Promise<void> {
+  return useMock ? mock.answerUpdate(answer) : invoke("answer_update", { answer });
+}
+
+/** On macOS the app restarts before this settles; it rejects with the error message on failure. */
+export function installUpdate(): Promise<void> {
+  return useMock ? mock.installUpdate() : invoke("install_update");
+}
+
+export function onUpdateOffer(cb: (info: UpdateInfo) => void): Promise<UnlistenFn> {
+  return useMock ? mock.onUpdateOffer(cb) : listen<UpdateInfo>("update-offer", (e) => cb(e.payload));
+}
+
+export function onUpdateProgress(cb: (progress: UpdateProgress) => void): Promise<UnlistenFn> {
+  return useMock ? mock.onUpdateProgress(cb) : listen<UpdateProgress>("update-progress", (e) => cb(e.payload));
 }

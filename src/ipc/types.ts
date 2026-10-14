@@ -134,3 +134,27 @@ export interface PdfExport {
   pages: number;
   bytes: number;
 }
+
+// ---- In-app updates: docs/impl/updates.md > Types -------------------------
+
+export interface UpdateInfo {
+  version: string;
+  current: string;
+}
+
+export interface UpdateCheck {
+  current: string;
+  available: UpdateInfo | null;
+  /** True when `available` is the version the user skipped. */
+  skipped: boolean;
+}
+
+export type UpdatePhase = "downloading" | "installing";
+
+export interface UpdateProgress {
+  phase: UpdatePhase;
+  downloaded: number;
+  total: number | null;
+}
+
+export type UpdateAnswer = "later" | "skip";

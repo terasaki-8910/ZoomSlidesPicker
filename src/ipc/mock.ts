@@ -29,6 +29,10 @@ import type {
   SettingsView,
   Shortcuts,
   Snapshot,
+  UpdateAnswer,
+  UpdateCheck,
+  UpdateInfo,
+  UpdateProgress,
   WindowEntry,
 } from "./types";
 
@@ -800,5 +804,106 @@ export async function onSettings(cb: (settings: SettingsView) => void): Promise<
   settingsListeners.add(cb);
   return () => {
     settingsListeners.delete(cb);
+  };
+}
+
+// ---- In-app updates (docs/impl/updates.md) --------------------------------
+// Scenario via the URL query, like `preset` above (all optional):
+//   update=offer          the launch check found 0.2.0 (get_update_offer returns it; default: none)
+//   check=uptodate|available|skipped|error   what the manual check returns (default: uptodate)
+//   install=stall|fail    install_update downloads to 40% and then stays there (default, so a
+//                         screenshot can be taken), or fails after the progress (message below)
+// Combine with `preset=running` for the busy state. Module-level setters below let a
+// script change the scenario at runtime too.
+
+const MOCK_CURRENT_VERSION = "0.1.6";
+const MOCK_NEW_VERSION = "0.2.0";
+
+function queryParam(name: string): string | null {
+  if (typeof location === "undefined") return null;
+  return new URLSearchParams(location.search).get(name);
+}
+
+type MockCheckResult = "uptodate" | "available" | "skipped" | "error";
+type MockInstallResult = "stall" | "fail";
+
+let updateOffer: UpdateInfo | null =
+  queryParam("update") === "offer" ? { version: MOCK_NEW_VERSION, current: MOCK_CURRENT_VERSION } : null;
+let checkResult: MockCheckResult = (queryParam("check") as MockCheckResult | null) ?? "uptodate";
+let installResult: MockInstallResult = (queryParam("install") as MockInstallResult | null) ?? "stall";
+
+const updateOfferListeners = new Set<(i: UpdateInfo) => void>();
+const updateProgressListeners = new Set<(p: UpdateProgress) => void>();
+
+/** Sets the unanswered launch offer and emits `update-offer` when one is given. */
+export function setMockUpdateOffer(info: UpdateInfo | null): void {
+  updateOffer = info;
+  if (info) for (const listener of updateOfferListeners) listener(info);
+}
+
+export function setMockCheckResult(result: MockCheckResult): void {
+  checkResult = result;
+}
+
+export function setMockInstallResult(result: MockInstallResult): void {
+  installResult = result;
+}
+
+function emitUpdateProgress(p: UpdateProgress): void {
+  for (const listener of updateProgressListeners) listener(p);
+}
+
+export async function getAppVersion(): Promise<string> {
+  return MOCK_CURRENT_VERSION;
+}
+
+export async function getUpdateOffer(): Promise<UpdateInfo | null> {
+  return updateOffer;
+}
+
+export async function checkUpdate(): Promise<UpdateCheck> {
+  const found: UpdateInfo = { version: MOCK_NEW_VERSION, current: MOCK_CURRENT_VERSION };
+  if (checkResult === "error") {
+    throw new Error(effectiveLanguageFor(settings.language) === "ja" ? "ネットワークに接続できません" : "Network is unreachable");
+  }
+  return {
+    current: MOCK_CURRENT_VERSION,
+    available: checkResult === "uptodate" ? null : found,
+    skipped: checkResult === "skipped",
+  };
+}
+
+export async function answerUpdate(answer: UpdateAnswer): Promise<void> {
+  void answer;
+  updateOffer = null;
+}
+
+export async function installUpdate(): Promise<void> {
+  if (appState.session !== null || appState.videoProgress !== null) {
+    throw new Error("A session is active");
+  }
+  const total = 50_000_000;
+  emitUpdateProgress({ phase: "downloading", downloaded: 0, total });
+  await delay(null, 150);
+  emitUpdateProgress({ phase: "downloading", downloaded: 20_000_000, total });
+  if (installResult === "fail") {
+    await delay(null, 150);
+    throw new Error("The signature does not match");
+  }
+  // Like the real app on macOS: never settles (the app would restart here).
+  return new Promise<void>(() => {});
+}
+
+export async function onUpdateOffer(cb: (info: UpdateInfo) => void): Promise<UnlistenFn> {
+  updateOfferListeners.add(cb);
+  return () => {
+    updateOfferListeners.delete(cb);
+  };
+}
+
+export async function onUpdateProgress(cb: (progress: UpdateProgress) => void): Promise<UnlistenFn> {
+  updateProgressListeners.add(cb);
+  return () => {
+    updateProgressListeners.delete(cb);
   };
 }

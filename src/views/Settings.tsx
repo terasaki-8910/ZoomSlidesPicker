@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import Button from "../components/Button";
 import Notice from "../components/Notice";
+import UpdateDialog from "../components/UpdateDialog";
 import { useLang } from "../i18n";
 import type { TKey } from "../i18n";
-import { chooseSaveRoot, getSettings, onSettings, setSettings as setSettingsIpc } from "../ipc";
-import type { LangSetting, Settings as SettingsModel, SettingsView, Shortcuts } from "../ipc/types";
+import { checkUpdate, chooseSaveRoot, getAppVersion, getSettings, onSettings, setSettings as setSettingsIpc } from "../ipc";
+import type { LangSetting, Settings as SettingsModel, SettingsView, Shortcuts, UpdateInfo } from "../ipc/types";
 import { isMac } from "../lib/platform";
 import { acceleratorFromKeyDown, formatAccelerator } from "../lib/shortcuts";
 import "./Settings.css";
@@ -19,6 +20,13 @@ const SHORTCUT_ROWS: { key: ShortcutKey; labelKey: TKey }[] = [
 
 type Status = { kind: "saved" } | { kind: "error"; message: string };
 
+type UpdateLine =
+  | { kind: "checking" }
+  | { kind: "upToDate" }
+  | { kind: "available"; version: string }
+  | { kind: "skipped"; version: string }
+  | { kind: "failed"; message: string };
+
 export default function Settings() {
   const { t } = useLang();
   const [settings, setSettingsState] = useState<SettingsView | null>(null);
@@ -27,6 +35,46 @@ export default function Settings() {
   const [status, setStatus] = useState<Status | null>(null);
   const [recording, setRecording] = useState<ShortcutKey | null>(null);
   const mac = isMac();
+  const [version, setVersion] = useState<string | null>(null);
+  const [updateLine, setUpdateLine] = useState<UpdateLine | null>(null);
+  const [updateDialog, setUpdateDialog] = useState<UpdateInfo | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getAppVersion().then((v) => {
+      if (active) setVersion(v);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleCheckUpdate() {
+    setUpdateLine({ kind: "checking" });
+    try {
+      const result = await checkUpdate();
+      if (!result.available) {
+        setUpdateLine({ kind: "upToDate" });
+        return;
+      }
+      setUpdateLine({ kind: result.skipped ? "skipped" : "available", version: result.available.version });
+      setUpdateDialog(result.available);
+    } catch (err) {
+      setUpdateLine({ kind: "failed", message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  const updateText = !updateLine
+    ? ""
+    : updateLine.kind === "checking"
+      ? t("settings.checking")
+      : updateLine.kind === "upToDate"
+        ? t("settings.upToDate")
+        : updateLine.kind === "available"
+          ? t("settings.updateAvailable", { version: updateLine.version })
+          : updateLine.kind === "skipped"
+            ? t("settings.updateSkipped", { version: updateLine.version })
+            : t("settings.checkFailed", { error: updateLine.message });
 
   useEffect(() => {
     let active = true;
@@ -135,6 +183,20 @@ export default function Settings() {
             {t("action.changeEllipsis")}
           </Button>
         </div>
+        <div className="settings-row">
+          <span className="settings-row-label settings-version tabular-nums">
+            {version !== null ? t("settings.version", { version }) : ""}
+          </span>
+          <Button kind="secondary" disabled={updateLine?.kind === "checking"} onClick={() => void handleCheckUpdate()}>
+            {t("settings.checkUpdate")}
+          </Button>
+        </div>
+        <p
+          className={updateLine?.kind === "failed" ? "settings-update-line is-error" : "settings-update-line"}
+          role="status"
+        >
+          {updateText}
+        </p>
       </section>
 
       <section className="settings-section">
@@ -183,6 +245,8 @@ export default function Settings() {
       <p className={status?.kind === "error" ? "settings-status is-error" : "settings-status"} role="status">
         {status?.kind === "saved" ? t("settings.saved") : status?.kind === "error" ? status.message : ""}
       </p>
+
+      {updateDialog && <UpdateDialog info={updateDialog} answerLater={false} onClose={() => setUpdateDialog(null)} />}
     </div>
   );
 }
