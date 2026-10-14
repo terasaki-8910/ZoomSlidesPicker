@@ -174,7 +174,7 @@ describe("UpdateDialog installing", () => {
 });
 
 describe("UpdateDialog failed", () => {
-  it("shows the message and a Close button", async () => {
+  it("shows the message and a Close button, and closing counts as Later", async () => {
     setup();
     vi.mocked(ipc.installUpdate).mockRejectedValue(new Error("署名が合いません"));
     const onClose = vi.fn();
@@ -184,8 +184,10 @@ describe("UpdateDialog failed", () => {
     await waitFor(() => expect(button).toBeEnabled());
     await user.click(button);
     expect(await screen.findByText("更新できませんでした：署名が合いません")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "新しい版があります" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "閉じる" }));
     expect(onClose).toHaveBeenCalledTimes(1);
+    expect(ipc.answerUpdate).toHaveBeenCalledWith("later");
   });
 });
 

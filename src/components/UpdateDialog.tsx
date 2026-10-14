@@ -9,7 +9,7 @@ import "./UpdateDialog.css";
 
 interface UpdateDialogProps {
   info: UpdateInfo;
-  /** The dialog is done (Later, Skip, or Close after a failure). Never called while installing. */
+  /** The dialog is done (Later, Skip, or Close after a failure, which counts as Later). Never called while installing. */
   onClose: () => void;
   /**
    * Library window (launch offer): Later and light dismiss also tell Rust (`answer_update("later")`).
@@ -115,14 +115,16 @@ export default function UpdateDialog({ info, onClose, answerLater }: UpdateDialo
   }
 
   if (stage === "failed") {
+    // Closing after a failure counts as Later: the launch offer is not shown again this run
+    // (the manual check in Settings can try again).
     return (
-      <Modal titleId="update-dialog-title" onClose={onClose}>
+      <Modal titleId="update-dialog-title" onClose={later}>
         <h2 id="update-dialog-title" className="update-title">
-          {t("update.updatingTitle")}
+          {t("update.title")}
         </h2>
         <Notice>{t("update.failed", { error })}</Notice>
         <div className="update-actions">
-          <Button kind="primary" onClick={onClose}>
+          <Button kind="primary" onClick={later}>
             {t("update.close")}
           </Button>
         </div>
