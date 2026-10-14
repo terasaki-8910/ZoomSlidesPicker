@@ -101,13 +101,23 @@
   color: var(--color-text-secondary);
 }
 
+/* The version row and the check's result line. The empty line takes no room: a blank gap
+   under the row read as a stray space, and the result appears right under the button the
+   user just pressed, so the shift is expected. */
+.settings-update {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
 
-/* Reserves its line so the result appearing does not shift the sections below. */
 .settings-update-line {
   margin: 0;
-  min-height: 1.4em;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
+}
+
+.settings-update-line:empty {
+  margin-top: calc(-1 * var(--space-xs));
 }
 
 .settings-update-line.is-error {

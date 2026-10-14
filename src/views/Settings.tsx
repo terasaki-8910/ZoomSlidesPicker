@@ -183,20 +183,23 @@ export default function Settings() {
             {t("action.changeEllipsis")}
           </Button>
         </div>
-        <div className="settings-row">
-          <span className="settings-row-label settings-version tabular-nums">
-            {version !== null ? t("settings.version", { version }) : ""}
-          </span>
-          <Button kind="secondary" disabled={updateLine?.kind === "checking"} onClick={() => void handleCheckUpdate()}>
-            {t("settings.checkUpdate")}
-          </Button>
+        <div className="settings-update">
+          <div className="settings-row">
+            <span className="settings-row-label settings-version tabular-nums">
+              {version !== null ? t("settings.version", { version }) : ""}
+            </span>
+            <Button kind="secondary" disabled={updateLine?.kind === "checking"} onClick={() => void handleCheckUpdate()}>
+              {t("settings.checkUpdate")}
+            </Button>
+          </div>
+          {/* Always in the tree (a live region), but takes no room while empty. */}
+          <p
+            className={updateLine?.kind === "failed" ? "settings-update-line is-error" : "settings-update-line"}
+            role="status"
+          >
+            {updateText}
+          </p>
         </div>
-        <p
-          className={updateLine?.kind === "failed" ? "settings-update-line is-error" : "settings-update-line"}
-          role="status"
-        >
-          {updateText}
-        </p>
       </section>
 
       <section className="settings-section">
