@@ -35,6 +35,8 @@ export interface SessionView {
   windowLost: boolean; // the window is gone; the session is paused
   sourceKind: "window" | "mp4";
   sourceTitle: string; // window title, or video file name
+  /** True from Stop until the PDF is written; no session controls are shown meanwhile. */
+  stopping: boolean;
 }
 
 /** The most recent finished session. */
@@ -116,4 +118,19 @@ export interface CaptureView {
 
 export interface SessionDetail extends SessionSummary {
   captures: CaptureView[]; // in index order, only those whose PNG exists
+}
+
+// ---- PDF quality and export: docs/impl/library.md > Round 5 ---------------
+
+export type PdfQuality = "lossless" | "standard" | "light";
+
+export interface PdfEstimate {
+  quality: PdfQuality;
+  bytes: number;
+}
+
+export interface PdfExport {
+  path: string;
+  pages: number;
+  bytes: number;
 }

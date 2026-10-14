@@ -1,6 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { FiEdit2, FiSettings } from "react-icons/fi";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import {
+  FiCheckSquare,
+  FiDownload,
+  FiEdit2,
+  FiFileText,
+  FiFolder,
+  FiLayers,
+  FiMinusSquare,
+  FiSettings,
+  FiTrash2,
+} from "react-icons/fi";
 import Button from "../components/Button";
+import ContextMenu, { type ContextMenuItem } from "../components/ContextMenu";
+import ExportPdfDialog from "../components/ExportPdfDialog";
 import IconButton from "../components/IconButton";
 import Modal from "../components/Modal";
 import Notice from "../components/Notice";
@@ -20,7 +32,6 @@ import {
   openSessionPdf,
   openSettings,
   pauseSession,
-  rebuildSessionPdf,
   renameSession,
   requestPermission,
   resumeSession,
@@ -30,13 +41,16 @@ import {
   trashCaptures,
   trashSession,
 } from "../ipc";
-import type { AppState, Lang, SessionDetail, SessionSummary } from "../ipc/types";
-import { formatDuration, formatElapsed, formatSessionRange, formatSessionStart, sessionDateSearchForms } from "../lib/format";
+import type { AppState, Lang, PdfExport, SessionDetail, SessionSummary } from "../ipc/types";
+import { formatBytes, formatDuration, formatElapsed, formatSessionRange, formatSessionStart, sessionDateSearchForms } from "../lib/format";
 import "./Library.css";
 
 type TFunc = (key: TKey, params?: Record<string, string | number>) => string;
-type ConfirmKind = "delete" | "trashCaptures";
-type ActionNotice = { tone: "warning" | "neutral"; text: string };
+type ConfirmKind = "delete" | "trashCaptures" | "trashOthers";
+type ActionNotice = { tone: "warning" | "neutral"; text: string; showFolder?: boolean };
+/** What the export dialog is open for: a whole session, or only some of its captures. */
+type ExportTarget = { dir: string; date: string; indices: number[] | null };
+type MenuState = { dir: string; x: number; y: number };
 
 // Thumbnail widths passed to thumbUrl() (docs/impl/library.md > Types): generous enough
 // for a retina display at each spot's rendered CSS size (64x36 and the grid tiles).
@@ -84,6 +98,32 @@ function SessionBadge({ session, t }: { session: SessionSummary; t: TFunc }) {
   return null;
 }
 
+type MenuAction = "folder" | "pdf" | "export" | "rename" | "trash";
+
+/** The session-row context menu: recording sessions only get folder and rename. */
+function SessionMenu({
+  session,
+  x,
+  y,
+  onAction,
+  onClose,
+}: {
+  session: SessionSummary;
+  x: number;
+  y: number;
+  onAction: (id: MenuAction) => void;
+  onClose: () => void;
+}) {
+  const { t } = useLang();
+  const item = (id: MenuAction, label: string, icon: ReactNode): ContextMenuItem => ({ id, label, icon, onSelect: () => onAction(id) });
+  const items = [item("folder", t("library.openFolder"), <FiFolder />)];
+  if (!session.recording && session.hasPdf) items.push(item("pdf", t("library.openPdf"), <FiFileText />));
+  if (!session.recording && session.count > 0) items.push(item("export", t("library.exportPdf"), <FiDownload />));
+  items.push(item("rename", t("library.rename"), <FiEdit2 />));
+  if (!session.recording) items.push(item("trash", t("library.menuTrash"), <FiTrash2 />));
+  return <ContextMenu x={x} y={y} label={t("library.menuLabel")} items={items} onClose={onClose} />;
+}
+
 export default function Library() {
   const { lang, t } = useLang();
 
@@ -101,8 +141,13 @@ export default function Library() {
   const [memoSaved, setMemoSaved] = useState(false);
   const [confirmKind, setConfirmKind] = useState<ConfirmKind | null>(null);
   const [notice, setNotice] = useState<ActionNotice | null>(null);
+  const [exportTarget, setExportTarget] = useState<ExportTarget | null>(null);
+  const [menu, setMenu] = useState<MenuState | null>(null);
 
   const selectedDirRef = useRef<string | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const lastClickedRef = useRef<number | null>(null);
+  const renameRequestRef = useRef<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const suppressNextBlurRef = useRef(false);
   const memoSavedForRef = useRef<string | null>(null);
@@ -139,8 +184,10 @@ export default function Library() {
     setSelectedDir(dir);
     setSelectMode(false);
     setSelectedCaptures(new Set());
+    lastClickedRef.current = null;
     setRenaming(false);
     setConfirmKind(null);
+    setMenu(null);
     setNotice(null);
     setMemoSaved(false);
   }, []);
@@ -243,6 +290,13 @@ export default function Library() {
         setDetail(d);
         memoSavedForRef.current = d.memo;
         setMemoValue(d.memo);
+        if (renameRequestRef.current === d.dir) {
+          // 名前を変更 chosen from the context menu of a row that was not selected yet.
+          renameRequestRef.current = null;
+          suppressNextBlurRef.current = false;
+          setRenameValue(d.title);
+          setRenaming(true);
+        }
       })
       .catch((e) => {
         if (active) setNotice({ tone: "warning", text: errorMessage(e) });
@@ -258,7 +312,7 @@ export default function Library() {
   // never while typing in a text field, or while a modal (picker/confirm) is open.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (pickerOpen || confirmKind != null) return;
+      if (pickerOpen || confirmKind != null || exportTarget != null || menu != null) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (filtered.length === 0) return;
       const idx = filtered.findIndex((s) => s.dir === selectedDir);
@@ -273,7 +327,29 @@ export default function Library() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [pickerOpen, confirmKind, filtered, selectedDir, selectDir]);
+  }, [pickerOpen, confirmKind, exportTarget, menu, filtered, selectedDir, selectDir]);
+
+  // ---- session row context menu ------------------------------------------
+  const closeMenu = useCallback(() => {
+    setMenu(null);
+    listRef.current?.focus();
+  }, []);
+
+  function openRowMenu(dir: string, x: number, y: number) {
+    if (dir !== selectedDirRef.current) selectDir(dir);
+    setMenu({ dir, x, y });
+  }
+
+  function runMenuAction(id: MenuAction, target: SessionSummary) {
+    const dir = target.dir;
+    const fail = (e: unknown) => setNotice({ tone: "warning", text: errorMessage(e) });
+    if (id === "folder") void openSessionFolder(dir).catch(fail);
+    else if (id === "pdf") void openSessionPdf(dir).catch(fail);
+    else if (id === "export") openExport(dir, target.startedAt, null);
+    else if (id === "trash") setConfirmKind("delete");
+    else if (detail && detail.dir === dir) startRename();
+    else renameRequestRef.current = dir; // started once the row's detail has loaded
+  }
 
   // ---- rename in place ------------------------------------------------------
   useEffect(() => {
@@ -359,14 +435,17 @@ export default function Library() {
     }
   }
 
-  async function handleRebuildPdf() {
-    if (!detail) return;
-    try {
-      const count = await rebuildSessionPdf(detail.dir);
-      setNotice({ tone: "neutral", text: t("rebuild.result", { count }) });
-    } catch (e) {
-      setNotice({ tone: "warning", text: errorMessage(e) });
-    }
+  function openExport(dir: string, startedAt: string, indices: number[] | null) {
+    setExportTarget({ dir, date: startedAt.slice(0, 10), indices });
+  }
+
+  function handleExportDone(result: PdfExport) {
+    setExportTarget(null);
+    setNotice({
+      tone: "neutral",
+      text: t("export.done", { pages: result.pages, size: formatBytes(result.bytes, 1) }),
+      showFolder: true,
+    });
   }
 
   async function handleDedupe() {
@@ -388,25 +467,45 @@ export default function Library() {
   function handleEnterSelect() {
     setSelectMode(true);
     setSelectedCaptures(new Set());
+    lastClickedRef.current = null;
     setNotice(null);
   }
 
   function handleExitSelect() {
     setSelectMode(false);
     setSelectedCaptures(new Set());
+    lastClickedRef.current = null;
   }
 
-  function toggleCapture(index: number) {
+  // Click toggles (Cmd/Ctrl+click too); Shift+click adds the range from the last clicked
+  // tile to this one, both ends included.
+  function handleTileClick(captures: SessionDetail["captures"], index: number, shift: boolean) {
+    const last = lastClickedRef.current;
+    lastClickedRef.current = index;
     setSelectedCaptures((prev) => {
       const next = new Set(prev);
+      if (shift && last != null) {
+        const from = captures.findIndex((c) => c.index === last);
+        const to = captures.findIndex((c) => c.index === index);
+        if (from !== -1 && to !== -1) {
+          const [lo, hi] = from < to ? [from, to] : [to, from];
+          for (let i = lo; i <= hi; i++) next.add(captures[i].index);
+          return next;
+        }
+      }
       if (next.has(index)) next.delete(index);
       else next.add(index);
       return next;
     });
   }
 
+  function handleToggleAll(captures: SessionDetail["captures"]) {
+    lastClickedRef.current = null;
+    setSelectedCaptures((prev) => (prev.size === captures.length ? new Set() : new Set(captures.map((c) => c.index))));
+  }
+
   async function handleConfirmDeleteSession() {
-    if (!detail) return;
+    if (!detail || detail.dir !== selectedDir) return;
     setConfirmKind(null);
     try {
       await trashSession(detail.dir);
@@ -415,9 +514,11 @@ export default function Library() {
     }
   }
 
-  async function handleConfirmTrashCaptures() {
+  async function handleConfirmTrashCaptures(others: boolean) {
     if (!detail) return;
-    const indices = [...selectedCaptures];
+    const indices = others
+      ? detail.captures.map((c) => c.index).filter((i) => !selectedCaptures.has(i))
+      : [...selectedCaptures];
     setConfirmKind(null);
     try {
       await trashCaptures(detail.dir, indices);
@@ -446,6 +547,13 @@ export default function Library() {
         </div>
       );
     }
+    if (session.stopping) {
+      return (
+        <div className="library-toolbar-status">
+          <span className="library-toolbar-state">{t("panel.stopping")}</span>
+        </div>
+      );
+    }
     const isPaused = session.state === "paused";
     return (
       <div className="library-toolbar-status">
@@ -463,7 +571,16 @@ export default function Library() {
     );
   }
 
+  function renderMenu() {
+    if (!menu) return null;
+    const target = sessions?.find((x) => x.dir === menu.dir);
+    if (!target) return null;
+    return <SessionMenu session={target} x={menu.x} y={menu.y} onAction={(id) => runMenuAction(id, target)} onClose={closeMenu} />;
+  }
+
   function renderDetail(session: SessionDetail) {
+    const allSelected = session.captures.length > 0 && selectedCaptures.size === session.captures.length;
+    const othersCount = session.captures.filter((c) => !selectedCaptures.has(c.index)).length;
     const metaParts = [
       // No "{app} の「{title}」" segment for an mp4-mode session: there is no capturing
       // app to name (sourceApp is null), and the title above already shows the file name.
@@ -532,13 +649,34 @@ export default function Library() {
         {session.recording ? (
           <div className="library-detail-actions">
             <Button kind="secondary" onClick={() => void handleOpenFolder()}>
+              <FiFolder aria-hidden="true" />
               {t("library.openFolder")}
             </Button>
           </div>
         ) : selectMode ? (
           <div className="library-detail-actions">
-            <Button kind="primary" disabled={selectedCaptures.size === 0} onClick={() => setConfirmKind("trashCaptures")}>
+            <Button
+              kind="primary"
+              disabled={selectedCaptures.size === 0}
+              onClick={() => openExport(session.dir, session.startedAt, [...selectedCaptures].sort((x, y) => x - y))}
+            >
+              <FiDownload aria-hidden="true" />
+              {t("library.exportSelected")}
+            </Button>
+            <Button kind="secondary" disabled={selectedCaptures.size === 0} onClick={() => setConfirmKind("trashCaptures")}>
+              <FiTrash2 aria-hidden="true" />
               {t("library.trashSelected", { count: selectedCaptures.size })}
+            </Button>
+            <Button
+              kind="secondary"
+              disabled={selectedCaptures.size === 0 || othersCount === 0}
+              onClick={() => setConfirmKind("trashOthers")}
+            >
+              <FiMinusSquare aria-hidden="true" />
+              {t("library.trashOthers", { count: othersCount })}
+            </Button>
+            <Button kind="secondary" onClick={() => handleToggleAll(session.captures)}>
+              {allSelected ? t("library.clearSelection") : t("library.selectAll")}
             </Button>
             <Button kind="secondary" onClick={handleExitSelect}>
               {t("library.cancelSelect")}
@@ -547,23 +685,33 @@ export default function Library() {
         ) : (
           <div className="library-detail-actions">
             <Button kind="secondary" onClick={() => void handleOpenFolder()}>
+              <FiFolder aria-hidden="true" />
               {t("library.openFolder")}
             </Button>
             {session.hasPdf && (
               <Button kind="secondary" onClick={() => void handleOpenPdf()}>
+                <FiFileText aria-hidden="true" />
                 {t("library.openPdf")}
               </Button>
             )}
-            <Button kind="secondary" onClick={() => void handleRebuildPdf()}>
-              {t("library.rebuildPdf")}
+            <Button
+              kind="secondary"
+              disabled={session.captures.length === 0}
+              onClick={() => openExport(session.dir, session.startedAt, null)}
+            >
+              <FiDownload aria-hidden="true" />
+              {t("library.exportPdf")}
             </Button>
             <Button kind="secondary" onClick={() => void handleDedupe()}>
+              <FiLayers aria-hidden="true" />
               {t("library.dedupe")}
             </Button>
             <Button kind="secondary" onClick={handleEnterSelect}>
+              <FiCheckSquare aria-hidden="true" />
               {t("library.select")}
             </Button>
             <Button kind="secondary" className="library-btn-danger" onClick={() => setConfirmKind("delete")}>
+              <FiTrash2 aria-hidden="true" />
               {t("library.delete")}
             </Button>
           </div>
@@ -571,7 +719,19 @@ export default function Library() {
 
         {session.recording && <p className="library-recording-note">{t("library.recordingLocked")}</p>}
 
-        {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
+        {notice && (
+          <Notice tone={notice.tone}>
+            {notice.text}
+            {notice.showFolder && (
+              <>
+                {" "}
+                <button type="button" className="library-notice-link" onClick={() => void handleOpenFolder()}>
+                  {t("export.showInFolder")}
+                </button>
+              </>
+            )}
+          </Notice>
+        )}
 
         <div className="library-grid">
           {session.captures.map((c) => {
@@ -586,11 +746,13 @@ export default function Library() {
               <label key={c.index} className="library-tile library-tile-selectable">
                 {img}
                 <span className="library-tile-caption-row">
+                  {/* onClick, not onChange: only the click event carries Shift / Cmd / Ctrl. */}
                   <input
                     type="checkbox"
                     className="library-tile-check"
                     checked={selectedCaptures.has(c.index)}
-                    onChange={() => toggleCapture(c.index)}
+                    onChange={() => {}}
+                    onClick={(e) => handleTileClick(session.captures, c.index, e.shiftKey)}
                   />
                   {captionEl}
                 </span>
@@ -639,11 +801,21 @@ export default function Library() {
             <p className="library-empty-hint">{t("library.noHits")}</p>
           ) : (
             <ul
+              ref={listRef}
               role="listbox"
               aria-labelledby="library-search-label"
               aria-activedescendant={selectedDir ? `library-option-${selectedDir}` : undefined}
               tabIndex={0}
               className="library-list"
+              onKeyDown={(e) => {
+                // The context-menu key / Shift+F10 opens the menu for the active row.
+                if (e.key !== "ContextMenu" && !(e.key === "F10" && e.shiftKey)) return;
+                const row = selectedDir ? document.getElementById(`library-option-${selectedDir}`) : null;
+                if (!selectedDir || !row) return;
+                e.preventDefault();
+                const r = row.getBoundingClientRect();
+                openRowMenu(selectedDir, r.left + 48, r.bottom - 4);
+              }}
             >
               {filtered.map((s) => (
                 // Keyboard interaction is handled globally above (Arrow/Home/End) via
@@ -657,6 +829,10 @@ export default function Library() {
                   aria-selected={s.dir === selectedDir}
                   className={s.dir === selectedDir ? "library-row is-selected" : "library-row"}
                   onClick={() => selectDir(s.dir)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    openRowMenu(s.dir, e.clientX, e.clientY);
+                  }}
                 >
                   {s.thumbPath ? (
                     <img src={thumbUrl(s.thumbPath, LIST_THUMB_WIDTH)} alt="" loading="lazy" className="library-row-thumb" />
@@ -712,7 +888,7 @@ export default function Library() {
         </Modal>
       )}
 
-      {confirmKind === "delete" && detail && (
+      {confirmKind === "delete" && detail && detail.dir === selectedDir && (
         <Modal titleId="library-confirm-delete-text" onClose={() => setConfirmKind(null)}>
           <p id="library-confirm-delete-text" className="library-confirm-message">
             {t("library.confirmDelete", { title: detail.title })}
@@ -734,7 +910,7 @@ export default function Library() {
             {t("library.confirmTrashImages", { count: selectedCaptures.size })}
           </p>
           <div className="library-confirm-actions">
-            <Button kind="primary" className="library-btn-confirm-danger" onClick={() => void handleConfirmTrashCaptures()}>
+            <Button kind="primary" className="library-btn-confirm-danger" onClick={() => void handleConfirmTrashCaptures(false)}>
               {t("library.confirmDeleteButton")}
             </Button>
             <Button kind="secondary" onClick={() => setConfirmKind(null)}>
@@ -743,6 +919,34 @@ export default function Library() {
           </div>
         </Modal>
       )}
+
+      {confirmKind === "trashOthers" && detail && (
+        <Modal titleId="library-confirm-others-text" onClose={() => setConfirmKind(null)}>
+          <p id="library-confirm-others-text" className="library-confirm-message">
+            {t("library.confirmTrashOthers", { count: detail.captures.filter((c) => !selectedCaptures.has(c.index)).length })}
+          </p>
+          <div className="library-confirm-actions">
+            <Button kind="primary" className="library-btn-confirm-danger" onClick={() => void handleConfirmTrashCaptures(true)}>
+              {t("library.confirmDeleteButton")}
+            </Button>
+            <Button kind="secondary" onClick={() => setConfirmKind(null)}>
+              {t("library.cancel")}
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {exportTarget && (
+        <ExportPdfDialog
+          dir={exportTarget.dir}
+          date={exportTarget.date}
+          indices={exportTarget.indices}
+          onClose={() => setExportTarget(null)}
+          onDone={handleExportDone}
+        />
+      )}
+
+      {renderMenu()}
     </div>
   );
 }

@@ -158,6 +158,13 @@ export default function Panel() {
 
     if (appState.session) {
       const session = appState.session;
+      if (session.stopping) {
+        return (
+          <div className="panel-section">
+            <p className="panel-status">{t("panel.stopping")}</p>
+          </div>
+        );
+      }
       const isPaused = session.state === "paused";
       return (
         <div className="panel-section">

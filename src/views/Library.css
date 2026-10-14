@@ -394,3 +394,19 @@
   color: var(--color-text-secondary);
   text-align: center;
 }
+
+/* Select-mode: shift-click selects a range, so a drag-select highlight would only get in the way. */
+.library-tile-selectable {
+  user-select: none;
+}
+
+/* "フォルダで表示" inside the result notice: a text link, not a second button. */
+.library-notice-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--color-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
