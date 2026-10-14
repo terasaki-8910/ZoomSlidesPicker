@@ -238,8 +238,12 @@ in pixels as points (so a `light` page is smaller).
 - session.json `pdf` gains `quality` (`"lossless" | "standard" | "light"`); missing in old
   files means `lossless`. `trash_captures` and the panel's `rebuild_pdf` rebuild with the
   quality recorded there (`standard` when there is no PDF yet).
-- Estimates: encode up to 8 evenly spaced images of the set at each quality, scale the
-  bytes by `count / sampled`, add the PDF overhead. `lossless` uses the same sampling.
+- Estimates: encode up to 8 evenly spaced images of the set at each quality (the
+  midpoints of 8 equal parts), apply their encoded-to-PNG size ratio to the PNG bytes of
+  the whole set, add the PDF overhead. `lossless` uses the same sampling. Scaling by count
+  alone was off by far more on real sessions, whose slides differ by over 10x in PNG size;
+  on the 181-image 2026-10-13 session the estimates came within 13% (standard 89.7 MB
+  against 80.6 MB written, lossless 255.3 / 264.1, light 42.7 / 37.8).
 
 ```ts
 type PdfQuality = "lossless" | "standard" | "light";
