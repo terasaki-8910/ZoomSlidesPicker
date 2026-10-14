@@ -201,7 +201,11 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, m: MenuModel) -> tauri::Result<Men
     };
     let library = item("library", i18n::tray_history(m.lang), true)?;
     let start = item("start", i18n::tray_start(m.lang), !m.has_session)?;
-    let stop = item("stop", i18n::tray_stop(m.lang), m.has_session && !m.stopping)?;
+    let stop = item(
+        "stop",
+        i18n::tray_stop(m.lang),
+        m.has_session && !m.stopping,
+    )?;
     let open_folder = item(
         "open_folder",
         i18n::tray_open_folder(m.lang),
