@@ -4,8 +4,8 @@
 //! - `NNN_hh-mm-ss.png`: each capture, lossless, at the captured size
 //! - `session.json`: the record, rewritten atomically (temp file + rename) after every change,
 //!   so a crash leaves a valid file; shape in `docs/session.schema.json`
-//! - `slides.pdf`: one page per capture in order, page size = image size (1 px = 1 pt),
-//!   images embedded losslessly (8-bit RGB, Flate)
+//! - `slides.pdf`: one page per capture in order, page size = embedded image size (1 px =
+//!   1 pt); the quality (lossless Flate, or JPEG) is recorded in session.json `pdf.quality`
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Local, SecondsFormat};
 use image::RgbImage;
+use image::imageops::FilterType;
+use jpeg_encoder::{ColorType, Encoder, SamplingFactor};
 use miniz_oxide::deflate::{CompressionLevel, compress_to_vec_zlib};
 use pdf_writer::{Content, Filter, Finish, Name, Pdf, Rect, Ref};
 use serde::{Deserialize, Serialize};
@@ -108,7 +110,30 @@ pub struct PdfRecord {
     pub pages: usize,
     /// RFC 3339 local time of the last rebuild; None until rebuilt.
     pub rebuilt_at: Option<String>,
+    /// How the images are embedded; files written before this field existed are lossless.
+    #[serde(default)]
+    pub quality: PdfQuality,
 }
+
+/// How a PDF embeds its images.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PdfQuality {
+    /// 8-bit RGB, Flate: pixel-identical to the PNG.
+    #[default]
+    Lossless,
+    /// JPEG quality 90, 4:4:4 chroma, full size.
+    Standard,
+    /// Scaled to at most [`LIGHT_MAX_WIDTH`] px wide, JPEG quality 85, 4:2:0 chroma.
+    Light,
+}
+
+/// The widest a [`PdfQuality::Light`] page gets, in pixels.
+pub const LIGHT_MAX_WIDTH: u32 = 1920;
+const STANDARD_JPEG_QUALITY: u8 = 90;
+const LIGHT_JPEG_QUALITY: u8 = 85;
+/// Images encoded per [`PdfQuality`] estimate.
+const ESTIMATE_SAMPLES: usize = 8;
 
 /// The contents of session.json (schema version 1).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -401,11 +426,12 @@ impl SessionWriter {
                 .map(|c| self.dir.join(&c.file))
                 .collect();
             let path = self.dir.join(PDF_FILE);
-            write_pdf(&images, &path)?;
+            write_pdf(&images, &path, PdfQuality::Standard)?;
             self.file.pdf = Some(PdfRecord {
                 file: PDF_FILE.to_string(),
                 pages: images.len(),
                 rebuilt_at: None,
+                quality: PdfQuality::Standard,
             });
             Some(path)
         };
@@ -415,10 +441,119 @@ impl SessionWriter {
     }
 }
 
-/// Write a PDF with one page per image, in order. Page size equals the image size in
-/// pixels, as points; each page carries its own `MediaBox [0 0 w h]`. Each page draws one
-/// image XObject (8-bit `DeviceRGB`, `FlateDecode`, lossless) over the whole page.
-pub fn write_pdf(images: &[PathBuf], out: &Path) -> io::Result<()> {
+/// One page's image, encoded for embedding.
+struct EncodedPage {
+    width: u32,
+    height: u32,
+    /// Flate stream (lossless) or JPEG file (otherwise).
+    data: Vec<u8>,
+    jpeg: bool,
+}
+
+fn encode_jpeg(rgb: &RgbImage, quality: u8, sampling: SamplingFactor) -> io::Result<Vec<u8>> {
+    let (w, h) = rgb.dimensions();
+    let too_big = |_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "image too large for a JPEG (65535 px)",
+        )
+    };
+    let (w16, h16) = (
+        u16::try_from(w).map_err(too_big)?,
+        u16::try_from(h).map_err(too_big)?,
+    );
+    let mut out = Vec::new();
+    let mut encoder = Encoder::new(&mut out, quality);
+    encoder.set_sampling_factor(sampling);
+    encoder
+        .encode(rgb.as_raw(), w16, h16, ColorType::Rgb)
+        .map_err(io::Error::other)?;
+    Ok(out)
+}
+
+fn encode_page(path: &Path, quality: PdfQuality) -> io::Result<EncodedPage> {
+    let rgb = image::open(path).map_err(io::Error::other)?.into_rgb8();
+    match quality {
+        PdfQuality::Lossless => {
+            let (width, height) = rgb.dimensions();
+            let data = compress_to_vec_zlib(rgb.as_raw(), CompressionLevel::DefaultLevel as u8);
+            Ok(EncodedPage {
+                width,
+                height,
+                data,
+                jpeg: false,
+            })
+        }
+        PdfQuality::Standard => {
+            let (width, height) = rgb.dimensions();
+            let data = encode_jpeg(&rgb, STANDARD_JPEG_QUALITY, SamplingFactor::F_1_1)?;
+            Ok(EncodedPage {
+                width,
+                height,
+                data,
+                jpeg: true,
+            })
+        }
+        PdfQuality::Light => {
+            let (w, h) = rgb.dimensions();
+            let rgb = if w > LIGHT_MAX_WIDTH {
+                let nh = ((h as u64 * LIGHT_MAX_WIDTH as u64 + w as u64 / 2) / w as u64).max(1);
+                image::imageops::resize(&rgb, LIGHT_MAX_WIDTH, nh as u32, FilterType::Lanczos3)
+            } else {
+                rgb
+            };
+            let (width, height) = rgb.dimensions();
+            let data = encode_jpeg(&rgb, LIGHT_JPEG_QUALITY, SamplingFactor::F_2_2)?;
+            Ok(EncodedPage {
+                width,
+                height,
+                data,
+                jpeg: true,
+            })
+        }
+    }
+}
+
+/// Encodes `images` on several threads, calling `sink` with each page in order.
+fn encode_pages(
+    images: &[PathBuf],
+    quality: PdfQuality,
+    mut sink: impl FnMut(EncodedPage),
+) -> io::Result<()> {
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .clamp(1, 8);
+    for chunk in images.chunks(threads) {
+        let pages: Vec<io::Result<EncodedPage>> = if chunk.len() == 1 {
+            vec![encode_page(&chunk[0], quality)]
+        } else {
+            std::thread::scope(|scope| {
+                let handles: Vec<_> = chunk
+                    .iter()
+                    .map(|p| scope.spawn(move || encode_page(p, quality)))
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|h| {
+                        h.join()
+                            .unwrap_or_else(|_| Err(io::Error::other("encoder thread panicked")))
+                    })
+                    .collect()
+            })
+        };
+        for page in pages {
+            sink(page?);
+        }
+    }
+    Ok(())
+}
+
+/// Write a PDF with one page per image, in order. Page size equals the embedded image's
+/// size in pixels, as points (a [`PdfQuality::Light`] page is smaller than its PNG); each
+/// page carries its own `MediaBox [0 0 w h]` and draws one image XObject (8-bit
+/// `DeviceRGB`) over the whole page: `FlateDecode` for lossless, `DCTDecode` otherwise.
+pub fn write_pdf(images: &[PathBuf], out: &Path, quality: PdfQuality) -> io::Result<()> {
     if images.is_empty() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -440,12 +575,12 @@ pub fn write_pdf(images: &[PathBuf], out: &Path) -> io::Result<()> {
         .count(page_ids.len() as i32);
 
     let image_name = Name(b"Im0");
-    for (path, &page_id) in images.iter().zip(&page_ids) {
+    let mut page_ids_iter = page_ids.iter();
+    encode_pages(images, quality, |enc| {
+        let page_id = *page_ids_iter.next().expect("one id per image");
         let content_id = Ref::new(page_id.get() + 1);
         let image_id = Ref::new(page_id.get() + 2);
-
-        let rgb = image::open(path).map_err(io::Error::other)?.into_rgb8();
-        let (width, height) = rgb.dimensions();
+        let (width, height) = (enc.width, enc.height);
 
         let mut page = pdf.page(page_id);
         page.media_box(Rect::new(0.0, 0.0, width as f32, height as f32));
@@ -454,9 +589,12 @@ pub fn write_pdf(images: &[PathBuf], out: &Path) -> io::Result<()> {
         page.resources().x_objects().pair(image_name, image_id);
         page.finish();
 
-        let encoded = compress_to_vec_zlib(rgb.as_raw(), CompressionLevel::DefaultLevel as u8);
-        let mut xobject = pdf.image_xobject(image_id, &encoded);
-        xobject.filter(Filter::FlateDecode);
+        let mut xobject = pdf.image_xobject(image_id, &enc.data);
+        xobject.filter(if enc.jpeg {
+            Filter::DctDecode
+        } else {
+            Filter::FlateDecode
+        });
         xobject.width(width as i32);
         xobject.height(height as i32);
         xobject.color_space().device_rgb();
@@ -470,9 +608,32 @@ pub fn write_pdf(images: &[PathBuf], out: &Path) -> io::Result<()> {
         content.x_object(image_name);
         content.restore_state();
         pdf.stream(content_id, &content.finish());
-    }
+    })?;
 
     write_atomic(out, &pdf.finish())
+}
+
+/// Fixed bytes of a PDF (header, catalog, trailer) and per page (page, content stream and
+/// image dictionaries, cross-reference entries), used by [`estimate_pdf_bytes`].
+const PDF_BASE_OVERHEAD: u64 = 1024;
+const PDF_PAGE_OVERHEAD: u64 = 400;
+
+/// Predicted size of the PDF [`write_pdf`] would write for `images`: encodes up to 8 evenly
+/// spaced images at `quality`, scales their bytes by `images.len() / sampled`, and adds the
+/// PDF overhead. 0 for no images.
+pub fn estimate_pdf_bytes(images: &[PathBuf], quality: PdfQuality) -> io::Result<u64> {
+    let count = images.len();
+    if count == 0 {
+        return Ok(0);
+    }
+    let sampled = count.min(ESTIMATE_SAMPLES);
+    let picks: Vec<PathBuf> = (0..sampled)
+        .map(|i| images[i * count / sampled].clone())
+        .collect();
+    let mut total: u64 = 0;
+    encode_pages(&picks, quality, |page| total += page.data.len() as u64)?;
+    let scaled = (total as u128 * count as u128 / sampled as u128) as u64;
+    Ok(scaled + PDF_BASE_OVERHEAD + PDF_PAGE_OVERHEAD * count as u64)
 }
 
 /// Parses a capture file name matching `^[0-9]{3,}_[0-9]{2,}-[0-9]{2}-[0-9]{2}\.png$`
@@ -503,11 +664,8 @@ fn capture_index(file_name: &str) -> Option<usize> {
     index.parse().ok()
 }
 
-/// Rebuild slides.pdf in a finished session folder from the `NNN_*.png` files still there,
-/// in index order (R2-3). Updates session.json: `pdf.pages` and `pdf.rebuilt_at` (`now`);
-/// `captures` is left unchanged. Returns the page count. With no images left, writes
-/// nothing and returns an `InvalidInput` error.
-pub fn rebuild_pdf(dir: &Path, now: DateTime<Local>) -> io::Result<usize> {
+/// The `NNN_*.png` files in `dir` as (index, path), in index order.
+fn existing_captures(dir: &Path) -> io::Result<Vec<(usize, PathBuf)>> {
     let mut found: Vec<(usize, PathBuf)> = fs::read_dir(dir)?
         .filter_map(|entry| entry.ok())
         .filter_map(|entry| {
@@ -516,29 +674,98 @@ pub fn rebuild_pdf(dir: &Path, now: DateTime<Local>) -> io::Result<usize> {
         })
         .collect();
     found.sort_by_key(|(index, _)| *index);
+    Ok(found)
+}
 
-    if found.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "no capture images left to rebuild the PDF from",
-        ));
+fn no_images_error() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidInput,
+        "no capture images left to write a PDF from",
+    )
+}
+
+/// The images `indices` names (`None`: all) that exist in `dir`, in index order. Errors
+/// when there are none.
+pub fn export_images(dir: &Path, indices: Option<&[usize]>) -> io::Result<Vec<PathBuf>> {
+    let wanted: Option<BTreeSet<usize>> = indices.map(|i| i.iter().copied().collect());
+    let images: Vec<PathBuf> = existing_captures(dir)?
+        .into_iter()
+        .filter(|(index, _)| wanted.as_ref().is_none_or(|w| w.contains(index)))
+        .map(|(_, path)| path)
+        .collect();
+    if images.is_empty() {
+        return Err(no_images_error());
     }
+    Ok(images)
+}
 
-    let images: Vec<PathBuf> = found.into_iter().map(|(_, path)| path).collect();
+/// Rebuild slides.pdf in a finished session folder from the `NNN_*.png` files still there,
+/// in index order (R2-3), at the quality recorded in session.json (`Standard` when there is
+/// no PDF yet). Updates session.json: `pdf.pages` and `pdf.rebuilt_at` (`now`);
+/// `captures` is left unchanged. Returns the page count. With no images left, writes
+/// nothing and returns an `InvalidInput` error.
+pub fn rebuild_pdf(dir: &Path, now: DateTime<Local>) -> io::Result<usize> {
+    let file = read_session(dir)?;
+    let quality = file
+        .pdf
+        .as_ref()
+        .map_or(PdfQuality::Standard, |p| p.quality);
+    Ok(export_pdf(dir, quality, None, now, "")?.pages)
+}
+
+/// What [`export_pdf`] wrote.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PdfExport {
+    pub path: PathBuf,
+    pub pages: usize,
+    pub bytes: u64,
+}
+
+/// Write a PDF of the session's images at `quality`.
+///
+/// `indices` `None`: every image in the folder; rewrites slides.pdf and sets session.json
+/// `pdf` (`pages`, `rebuilt_at` = `now`, `quality`). `Some`: only those that exist, in
+/// index order, as `<base_name> YYYY-MM-DD.pdf` in `dir` (the date is the session's start
+/// date in local time; ` 2`, ` 3`, ... before `.pdf` when the name is taken); session.json
+/// is not changed. Errors, writing nothing, when no image exists.
+pub fn export_pdf(
+    dir: &Path,
+    quality: PdfQuality,
+    indices: Option<&[usize]>,
+    now: DateTime<Local>,
+    base_name: &str,
+) -> io::Result<PdfExport> {
+    let images = export_images(dir, indices)?;
     let pages = images.len();
-    write_pdf(&images, &dir.join(PDF_FILE))?;
+    let mut file = read_session(dir)?;
 
-    let session_path = dir.join(SESSION_FILE);
-    let mut file: SessionFile =
-        serde_json::from_str(&fs::read_to_string(&session_path)?).map_err(io::Error::other)?;
-    file.pdf = Some(PdfRecord {
-        file: PDF_FILE.to_string(),
-        pages,
-        rebuilt_at: Some(now.to_rfc3339_opts(SecondsFormat::Secs, false)),
-    });
-    write_session_json(dir, &file)?;
+    let path = if indices.is_none() {
+        dir.join(PDF_FILE)
+    } else {
+        let date = DateTime::parse_from_rfc3339(&file.started_at)
+            .map_err(io::Error::other)?
+            .format("%Y-%m-%d");
+        let mut candidate = dir.join(format!("{base_name} {date}.pdf"));
+        let mut n = 2;
+        while candidate.exists() {
+            candidate = dir.join(format!("{base_name} {date} {n}.pdf"));
+            n += 1;
+        }
+        candidate
+    };
+    write_pdf(&images, &path, quality)?;
+    let bytes = fs::metadata(&path)?.len();
 
-    Ok(pages)
+    if indices.is_none() {
+        file.pdf = Some(PdfRecord {
+            file: PDF_FILE.to_string(),
+            pages,
+            rebuilt_at: Some(now.to_rfc3339_opts(SecondsFormat::Secs, false)),
+            quality,
+        });
+        write_session_json(dir, &file)?;
+    }
+    Ok(PdfExport { path, pages, bytes })
 }
 
 /// Reads and parses `dir`/session.json (the history window's `list_sessions`/`get_session`;
@@ -609,6 +836,10 @@ pub fn trash_captures(
     let mut file: SessionFile =
         serde_json::from_str(&fs::read_to_string(&session_path)?).map_err(io::Error::other)?;
 
+    let quality = file
+        .pdf
+        .as_ref()
+        .map_or(PdfQuality::Standard, |p| p.quality);
     let wanted: BTreeSet<usize> = indices.iter().copied().collect();
     for &index in &wanted {
         if !file.captures.iter().any(|c| c.index == index) {
@@ -645,11 +876,12 @@ pub fn trash_captures(
         }
         file.pdf = None;
     } else {
-        write_pdf(&images, &pdf_path)?;
+        write_pdf(&images, &pdf_path, quality)?;
         file.pdf = Some(PdfRecord {
             file: PDF_FILE.to_string(),
             pages: images.len(),
             rebuilt_at: Some(now.to_rfc3339_opts(SecondsFormat::Secs, false)),
+            quality,
         });
     }
     write_session_json(dir, &file)?;

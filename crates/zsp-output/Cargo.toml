@@ -14,8 +14,10 @@ serde_json = { workspace = true }
 pdf-writer = "0.15"
 miniz_oxide = "0.9"
 trash = "5"
+jpeg-encoder = "0.7"
 
 [dev-dependencies]
 tempfile = { workspace = true }
 lopdf = "0.45"
 jsonschema = "0.58"
+image = { workspace = true, features = ["jpeg"] }

@@ -244,10 +244,21 @@ fn b4_pdf_pages_sizes_and_lossless_images() {
         )
         .unwrap();
     }
-    let pdf = w.finish(Local::now()).unwrap().unwrap();
-    let got = pdf_page_sizes(&pdf);
+    let finished = w.finish(Local::now()).unwrap().unwrap();
+    let got = pdf_page_sizes(&finished);
     let want: Vec<(f64, f64)> = sizes.iter().map(|&(a, b)| (a as f64, b as f64)).collect();
     assert_eq!(got, want);
+
+    // Lossless embedding (finish writes standard; see b14).
+    let images: Vec<PathBuf> = w
+        .session()
+        .captures
+        .iter()
+        .map(|c| w.dir().join(&c.file))
+        .collect();
+    let pdf = w.dir().join("lossless.pdf");
+    zsp_output::write_pdf(&images, &pdf, zsp_output::PdfQuality::Lossless).unwrap();
+    assert_eq!(pdf_page_sizes(&pdf), want);
 
     // The first page's image is 8-bit RGB, Flate-compressed, byte-identical to the capture.
     let doc = lopdf::Document::load(&pdf).unwrap();
