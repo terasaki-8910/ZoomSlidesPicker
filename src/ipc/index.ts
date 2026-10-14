@@ -9,7 +9,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import * as mock from "./mock";
-import type { AppState, RegionSel, SessionDetail, SessionSummary, Settings, SettingsView, Snapshot, WindowEntry } from "./types";
+import type { AppState, PdfEstimate, PdfExport, PdfQuality, RegionSel, SessionDetail, SessionSummary, Settings, SettingsView, Snapshot, WindowEntry } from "./types";
 
 const useMock = import.meta.env.VITE_IPC_MOCK === "1";
 
@@ -136,8 +136,12 @@ export function openSessionPdf(dir: string): Promise<void> {
   return useMock ? mock.openSessionPdf(dir) : invoke("open_session_pdf", { dir });
 }
 
-export function rebuildSessionPdf(dir: string): Promise<number> {
-  return useMock ? mock.rebuildSessionPdf(dir) : invoke("rebuild_session_pdf", { dir });
+export function estimatePdf(dir: string, indices: number[] | null): Promise<PdfEstimate[]> {
+  return useMock ? mock.estimatePdf(dir, indices) : invoke("estimate_pdf", { dir, indices });
+}
+
+export function exportPdf(dir: string, quality: PdfQuality, indices: number[] | null): Promise<PdfExport> {
+  return useMock ? mock.exportPdf(dir, quality, indices) : invoke("export_pdf", { dir, quality, indices });
 }
 
 export function renameSession(dir: string, title: string | null): Promise<void> {

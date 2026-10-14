@@ -77,6 +77,7 @@ describe("Panel", () => {
           elapsedS: 754,
           blank: false,
           windowLost: false,
+          stopping: false,
           sourceKind: "window",
           sourceTitle: "Zoom Meeting",
         },
@@ -104,6 +105,7 @@ describe("Panel", () => {
           elapsedS: 10,
           blank: false,
           windowLost: false,
+          stopping: false,
           sourceKind: "window",
           sourceTitle: "Zoom Meeting",
         },
@@ -192,6 +194,31 @@ describe("Panel", () => {
     expect(ipc.openSettings).toHaveBeenCalledTimes(1);
   });
 
+  it("shows 'PDF を作成中…' and no session controls while stopping", async () => {
+    setup(
+      makeAppState({
+        session: {
+          state: "running",
+          count: 12,
+          dir: "d",
+          lastThumb: "data:image/svg+xml,thumb",
+          elapsedS: 754,
+          blank: false,
+          windowLost: false,
+          stopping: true,
+          sourceKind: "window",
+          sourceTitle: "Zoom Meeting",
+        },
+      })
+    );
+    render(<Panel />);
+
+    expect(await screen.findByText("PDF を作成中…")).toBeInTheDocument();
+    for (const name of ["停止", "一時停止", "今すぐ保存", "直前の保存を取り消す", "開始"]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+  });
+
   it("has no axe violations when stopped (C5)", async () => {
     setup(makeAppState());
     const { container } = render(<Panel />);
@@ -210,6 +237,7 @@ describe("Panel", () => {
           elapsedS: 1,
           blank: false,
           windowLost: false,
+          stopping: false,
           sourceKind: "window",
           sourceTitle: "Zoom Meeting",
         },

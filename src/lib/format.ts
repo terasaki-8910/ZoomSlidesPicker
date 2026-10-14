@@ -87,3 +87,11 @@ export function sessionDateSearchForms(iso: string): string[] {
   const { y, mo, d } = parseRfc3339(iso);
   return [`${mo}/${d}`, `${mo}月${d}日`, `${String(y).padStart(4, "0")}-${pad2(mo)}-${pad2(d)}`];
 }
+
+/** "73 MB" (whole numbers from 10 MB, else one decimal), "820 KB" below 1 MB. */
+export function formatBytes(bytes: number, decimals: "auto" | 1 = "auto"): string {
+  const MB = 1024 * 1024;
+  if (bytes < MB && decimals === "auto") return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  const mb = bytes / MB;
+  return decimals === 1 || mb < 10 ? `${mb.toFixed(1)} MB` : `${Math.round(mb)} MB`;
+}

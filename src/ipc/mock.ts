@@ -16,6 +16,9 @@ import type {
   CaptureView,
   Lang,
   LangSetting,
+  PdfEstimate,
+  PdfExport,
+  PdfQuality,
   PermissionView,
   RegionSel,
   SessionDetail,
@@ -196,6 +199,7 @@ function sampleSession(state: SessionState): SessionView {
     windowLost: false,
     sourceKind: "window",
     sourceTitle: "Zoom Meeting",
+    stopping: false,
   };
 }
 
@@ -207,6 +211,7 @@ const PRESETS: Record<string, () => AppState> = {
   }),
   running: () => ({ ...baseAppState(), session: sampleSession("running") }),
   paused: () => ({ ...baseAppState(), session: sampleSession("paused") }),
+  stopping: () => ({ ...baseAppState(), session: { ...sampleSession("running"), stopping: true } }),
   "window-lost": () => ({ ...baseAppState(), session: { ...sampleSession("paused"), windowLost: true } }),
   blank: () => ({ ...baseAppState(), session: { ...sampleSession("running"), blank: true } }),
   "no-permission": () => ({ ...baseAppState(), permission: { granted: false, platform: "macos" } }),
@@ -349,6 +354,7 @@ export async function startSession(windowId: number, region: RegionSel): Promise
       windowLost: false,
       sourceKind: "window",
       sourceTitle: w.title,
+      stopping: false,
     },
   };
   emitAppState();
@@ -392,10 +398,16 @@ export async function undoLast(): Promise<void> {
 }
 
 export async function stopSession(): Promise<void> {
-  if (appState.session) {
+  if (appState.session && !appState.session.stopping) {
     const { count, dir } = appState.session;
-    appState = { ...appState, session: null, lastSession: { dir, count, hasPdf: count > 0 } };
+    appState = { ...appState, session: { ...appState.session, stopping: true } };
     emitAppState();
+    // The real backend writes the PDF before it reports the session as finished.
+    setTimeout(() => {
+      if (!appState.session?.stopping) return;
+      appState = { ...appState, session: null, lastSession: { dir, count, hasPdf: count > 0 } };
+      emitAppState();
+    }, 1500);
   }
 }
 
@@ -666,17 +678,48 @@ export async function openSessionPdf(dir: string): Promise<void> {
   // Nothing to open in a plain browser; the real command opens slides.pdf.
 }
 
-export async function rebuildSessionPdf(dir: string): Promise<number> {
+const MB = 1024 * 1024;
+// Mock bytes per page, from the contract's measured ratios.
+const MOCK_BYTES_PER_PAGE: Record<PdfQuality, number> = {
+  lossless: 1.4 * MB,
+  standard: 0.4 * MB,
+  light: 0.19 * MB,
+};
+const MOCK_QUALITIES: PdfQuality[] = ["lossless", "standard", "light"];
+const MOCK_DELAY_MS = 600;
+
+function exportPages(record: SessionRecord, indices: number[] | null): number {
+  if (indices === null) return record.captures.length;
+  const wanted = new Set(indices);
+  return record.captures.filter((c) => wanted.has(c.index)).length;
+}
+
+export async function estimatePdf(dir: string, indices: number[] | null): Promise<PdfEstimate[]> {
   const record = findRecord(dir);
   if (!record) throw notFoundError();
   if (record.summary.recording) throw recordingLockedError();
-  // SPEC-QUESTION: docs/impl/library.md's table does not say this command errors on no
-  // images (unlike rebuild_pdf's panel/Settings equivalent) -- treated the same way for
-  // consistency, since both wrap the same zsp-output rebuild_pdf. See the report.
-  if (record.captures.length === 0) throw noPdfError();
-  record.summary.hasPdf = true;
+  const pages = exportPages(record, indices);
+  await delay(undefined, MOCK_DELAY_MS);
+  return MOCK_QUALITIES.map((quality) => ({ quality, bytes: Math.round(pages * MOCK_BYTES_PER_PAGE[quality]) }));
+}
+
+export async function exportPdf(dir: string, quality: PdfQuality, indices: number[] | null): Promise<PdfExport> {
+  const record = findRecord(dir);
+  if (!record) throw notFoundError();
+  if (record.summary.recording) throw recordingLockedError();
+  const pages = exportPages(record, indices);
+  if (pages === 0) throw noPdfError();
+  await delay(undefined, MOCK_DELAY_MS);
+  let path = `${dir}/slides.pdf`;
+  if (indices === null) {
+    record.summary.hasPdf = true;
+  } else {
+    const ja = effectiveLanguageFor(settings.language) === "ja";
+    const date = record.summary.startedAt.slice(0, 10);
+    path = `${dir}/${ja ? "選んだ画像" : "Selected images"} ${date}.pdf`;
+  }
   emitLibraryChanged();
-  return record.captures.length;
+  return { path, pages, bytes: Math.round(pages * MOCK_BYTES_PER_PAGE[quality]) };
 }
 
 export async function renameSession(dir: string, title: string | null): Promise<void> {

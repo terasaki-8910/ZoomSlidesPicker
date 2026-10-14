@@ -371,6 +371,7 @@ describe("Library", () => {
             elapsedS: 5,
             blank: false,
             windowLost: false,
+            stopping: false,
             sourceKind: "window",
             sourceTitle: "Zoom Meeting",
           },
