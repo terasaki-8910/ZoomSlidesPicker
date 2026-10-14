@@ -45,6 +45,7 @@ pub fn list_windows<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<WindowEntry>, 
 /// window (docs/impl/ipc.md > begin_region).
 pub fn begin_region<R: Runtime>(app: &AppHandle<R>, window_id: u32) -> Result<(), String> {
     let lang = current_lang(app);
+    crate::updates::ensure_not_installing(app, lang)?;
     let capture = zsp_capture::WindowCapture::open(window_id)
         .map_err(|e| i18n::error_capture_failed(lang, &e.to_string()))?;
     let img = capture

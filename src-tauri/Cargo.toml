@@ -23,6 +23,9 @@ tauri-plugin-notification = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
+# In-app updates (docs/impl/updates.md): pinned with ~ to a release whose tauri requirement
+# (2.12) the app's tauri already meets.
+tauri-plugin-updater = "~2.13.3"
 
 zsp-detect = { workspace = true }
 zsp-output = { workspace = true }

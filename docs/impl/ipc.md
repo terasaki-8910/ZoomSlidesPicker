@@ -128,6 +128,16 @@ interface PdfEstimate { quality: PdfQuality; bytes: number }
 interface PdfExport { path: string; pages: number; bytes: number }
 ```
 
+In-app updates (docs/impl/updates.md has the full contract):
+
+```ts
+interface UpdateInfo { version: string; current: string }
+interface UpdateCheck { current: string; available: UpdateInfo | null; skipped: boolean }
+type UpdatePhase = "downloading" | "installing";
+interface UpdateProgress { phase: UpdatePhase; downloaded: number; total: number | null }
+type UpdateAnswer = "later" | "skip";
+```
+
 ## Commands
 
 Invoke names are snake_case; argument keys are camelCase (Tauri converts). Errors are
@@ -176,6 +186,20 @@ found.`:
 | `fold_session` | `dir` | `number[]` | Dry run of `zsp_detect::fold_captures` over the session's existing PNGs (in index order); returns the indices it would not keep. Error while recording. |
 | `open_capture` | `path: string` | | Opens one capture PNG with the OS default app. The path must be a capture of a known session. |
 
+The update commands (docs/impl/updates.md; the webview only calls these, the updater plugin
+has no webview permission). While an update installs, `begin_region`, `start_session`,
+`extract_video` (and its tray menu item), `rebuild_pdf` (and its tray menu item),
+`export_pdf`, `trash_captures`, `trash_session`, and `check_update` return `Updating. The app
+restarts when it's done.` / `更新しています。終わるとアプリが再起動します。`.
+
+| Command | Args | Returns | Behaviour |
+|---|---|---|---|
+| `get_app_version` | | `string` | The running version. |
+| `get_update_offer` | | `UpdateInfo \| null` | The launch check's find while unanswered this run; null otherwise. |
+| `check_update` | | `UpdateCheck` | Manual check; ignores the skipped version (`skipped` says whether `available` is it); keeps the found update for `install_update`. Error: the updater's message as is. |
+| `answer_update` | `answer: UpdateAnswer` | | `later`: not offered again this run. `skip`: records the found version in `update.json` (one at a time); error when nothing was found. Both clear the launch offer. |
+| `install_update` | | | Error when nothing was found, or a session is active (recording, paused, stopping, video). Else downloads (`update-progress`), waits for running PDF jobs, installs, restarts (macOS: never returns; Windows: the installer takes over and quits the app). On failure returns the error and clears the installing state. |
+
 ## Events (Rust -> all windows)
 
 | Event | Payload | When |
@@ -183,6 +207,8 @@ found.`:
 | `app-state` | `AppState` | After every change: session status, captures, last session, permission, video progress. |
 | `settings` | `SettingsView` | After `set_settings`. |
 | `library-changed` | none | After anything that changes what `list_sessions` or `get_session` returns: a session starts, a capture is saved, replaced, or undone, a session finishes, a library command changes something, the save root changes (docs/impl/library.md). |
+| `update-offer` | `UpdateInfo` | The launch check found a version that is not the skipped one. |
+| `update-progress` | `UpdateProgress` | While installing: each downloaded chunk (at most about 10 per second), a final `downloading` figure, then once with phase `installing`. |
 
 ## Windows
 

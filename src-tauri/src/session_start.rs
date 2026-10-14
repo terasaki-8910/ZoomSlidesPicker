@@ -38,6 +38,7 @@ pub fn start<R: Runtime>(
     let mut shell = shell_state.lock().unwrap();
     let lang = settings::effective_language(shell.settings.language);
 
+    crate::updates::ensure_not_installing(app, lang)?;
     if shell.session.is_some() {
         return Err(i18n::error_session_already_running(lang).to_string());
     }

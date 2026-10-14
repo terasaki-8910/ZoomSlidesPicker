@@ -16,6 +16,7 @@ mod state;
 mod thumb;
 mod tray;
 mod ui;
+mod updates;
 mod video;
 mod windows;
 
@@ -40,6 +41,7 @@ pub fn run() {
             .plugin(tauri_plugin_dialog::init())
             .plugin(tauri_plugin_opener::init())
             .plugin(tauri_plugin_positioner::init())
+            .plugin(tauri_plugin_updater::Builder::new().build())
             .setup(|app| {
                 // No Dock icon: this is a resident, tray-only app (SPEC.md > 使い方の流れ).
                 // The library window raises it to `Regular` while it is open (library.rs).
@@ -53,6 +55,7 @@ pub fn run() {
                 if let Ok(root) = env::var("ZSP_SAVE_ROOT") {
                     settings.save_root = root;
                 }
+                app.manage(updates::Updates::default());
                 let app_version = app.package_info().version.to_string();
                 app.manage(
                     Mutex::new(Shell::new(app_version, settings, known_roots)) as SharedShell
@@ -72,7 +75,8 @@ pub fn run() {
                 {
                     library::open_window(&handle);
                 }
-                autostart::spawn(handle);
+                autostart::spawn(handle.clone());
+                updates::spawn_launch_check(handle);
 
                 Ok(())
             }),
@@ -116,6 +120,11 @@ pub fn run() {
             library::trash_captures,
             library::fold_session,
             library::open_capture,
+            updates::get_app_version,
+            updates::get_update_offer,
+            updates::check_update,
+            updates::answer_update,
+            updates::install_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the tauri application");

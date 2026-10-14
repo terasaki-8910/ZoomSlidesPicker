@@ -167,6 +167,47 @@ pub struct RegionSel {
     pub h: f64,
 }
 
+/// A version the updater found (docs/impl/updates.md > Types).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInfo {
+    pub version: String,
+    pub current: String,
+}
+
+/// `check_update`'s result: `skipped` says whether `available` is the skipped version.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCheck {
+    pub current: String,
+    pub available: Option<UpdateInfo>,
+    pub skipped: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UpdatePhase {
+    Downloading,
+    Installing,
+}
+
+/// The `update-progress` event payload.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProgress {
+    pub phase: UpdatePhase,
+    pub downloaded: u64,
+    pub total: Option<u64>,
+}
+
+/// `answer_update`'s argument.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UpdateAnswer {
+    Later,
+    Skip,
+}
+
 /// A session folder path, as sent to the webview: always UTF-8 (SPEC.md session folders are
 /// named from an RFC 3339-safe timestamp, never from arbitrary OS path bytes).
 pub fn path_to_string(path: &Path) -> String {
