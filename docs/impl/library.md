@@ -224,3 +224,78 @@ errors) go in src-tauri/src/i18n.rs.
 ## Checks
 
 ACCEPTANCE C10-C14 (UI, on the mock) and B11-B12 (zsp-output); `sh scripts/check.sh` passes.
+
+## Round 5 additions (2026-10-14, DECISIONS.md "2026-10-14")
+
+### PDF quality and export
+
+Three qualities (`PdfQuality`, serde lowercase): `lossless` (today's embedding: 8-bit RGB,
+Flate), `standard` (JPEG quality 90, 4:4:4, full size, DCTDecode), `light` (scaled to at
+most 1920 px wide, JPEG quality 85, 4:2:0). A page's size equals its embedded image's size
+in pixels as points (so a `light` page is smaller).
+
+- The PDF written when a session stops is `standard` (was lossless).
+- session.json `pdf` gains `quality` (`"lossless" | "standard" | "light"`); missing in old
+  files means `lossless`. `trash_captures` and the panel's `rebuild_pdf` rebuild with the
+  quality recorded there (`standard` when there is no PDF yet).
+- Estimates: encode up to 8 evenly spaced images of the set at each quality, scale the
+  bytes by `count / sampled`, add the PDF overhead. `lossless` uses the same sampling.
+
+```ts
+type PdfQuality = "lossless" | "standard" | "light";
+interface PdfEstimate { quality: PdfQuality; bytes: number }
+interface PdfExport { path: string; pages: number; bytes: number }
+```
+
+| Command | Args | Returns | Behaviour |
+|---|---|---|---|
+| `estimate_pdf` | `dir, indices: number[] \| null` | `PdfEstimate[]` (all three, in the order lossless, standard, light) | `indices` null: every existing capture. Error while recording. |
+| `export_pdf` | `dir, quality: PdfQuality, indices: number[] \| null` | `PdfExport` | `indices` null: rewrites slides.pdf at that quality and updates session.json `pdf` (pages, `rebuilt_at`, `quality`). With indices: writes `選んだ画像 YYYY-MM-DD.pdf` / `Selected images YYYY-MM-DD.pdf` (effective language; the date is the session's start date; ` 2`, ` 3`... before `.pdf` when the name exists) in the session folder, in index order; session.json is not changed. Error while recording or when no image exists. Emits `library-changed`. |
+
+`rebuild_session_pdf` is removed from the library (the panel keeps `rebuild_pdf`).
+
+### Stopping
+
+`SessionView` gains `stopping: boolean`: true from the moment Stop is requested (tray menu,
+panel, library, shortcut) until the session has finished writing its PDF. While stopping:
+the tray shows the stopped icon, macOS shows the title `PDF…` and the tooltip / Windows
+tooltip says `PDF を作成中…` / `Writing the PDF…`; the menu's 停止 is disabled; the panel and
+the library's top bar show `PDF を作成中…` with no session controls. `Finished` clears the
+session as before (and its notification is unchanged).
+
+### Browser behaviour off in every window
+
+- Windows (WebView2): browser accelerator keys off for every window (Ctrl+J downloads,
+  Ctrl+P print, Ctrl+F find, F5 reload, F12 devtools, Ctrl+Shift+I, zoom keys, ...).
+- Every view (src/main.tsx): a capturing `keydown` listener that cancels the browser's own
+  shortcuts (the list above, plus Cmd/Ctrl+R, Cmd/Ctrl+Shift+R, Alt/Cmd+Left/Right history,
+  F3, F7, Ctrl+Tab) and a `contextmenu` listener that cancels the browser's menu everywhere
+  except in text inputs and textareas. Text editing keys (A, C, V, X, Z, Y with Cmd/Ctrl)
+  keep working in inputs; the app's own shortcuts (settings, the library's keys) keep
+  working.
+
+### Library window
+
+- Select mode: click toggles; Shift+click selects the range from the last clicked tile to
+  this one (inclusive, adds to the selection); Cmd/Ctrl+click toggles. `すべて選ぶ` /
+  `選択を解除` toggles everything.
+- Select mode actions (left to right): `選んだ画像で PDF を書き出す…` (export dialog with
+  the indices), `選んだ画像をごみ箱へ（N 枚）`, `選んだ画像以外をごみ箱へ（M 枚）` (confirm:
+  `選んでいない M 枚をごみ箱に移して、PDF を作り直しますか？`), then `すべて選ぶ`, `やめる`.
+- Detail action row: `PDF を作り直す` becomes `PDF を書き出す…` (export dialog, whole
+  session).
+- Export dialog (`PDF を書き出す`): three radio options with the estimate next to each
+  (`約 73 MB`; `見積もっています…` while waiting): `高画質（劣化なし）`, `標準`
+  (preselected), `軽量（幅 1920px）`; a line saying where it goes (`slides.pdf を作り直します。`
+  or `「選んだ画像 2026-10-13.pdf」としてフォルダに保存します。`); `書き出す` (primary) and
+  `やめる`. After it finishes: the inline notice `書き出しました（181 ページ、72.8 MB）。`
+  with `フォルダで表示`.
+- Session list rows: right click (or the context-menu key / Shift+F10 on the focused row)
+  opens a menu at the pointer: `フォルダを開く`, `PDF を開く` (when there is a PDF), `PDF を
+  書き出す…`, `名前を変更` (selects the row and starts rename), `ごみ箱へ…` (the existing
+  confirm). For a recording session only `フォルダを開く` and `名前を変更`. role=menu,
+  arrow keys, Enter, Escape, click outside closes.
+- Icons (react-icons Feather, next to the text, never instead of it): フォルダを開く
+  FiFolder, PDF を開く FiFileText, PDF を書き出す… FiDownload, 同じスライドをまとめる…
+  FiLayers, 画像を選ぶ FiCheckSquare, 名前を変更 FiEdit2, ごみ箱 FiTrash2, 選んだ画像以外
+  FiMinusSquare. The same icons in the context menu.
