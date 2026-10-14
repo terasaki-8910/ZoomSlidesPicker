@@ -34,6 +34,13 @@
 //! (`Config::add_max_share`): against the old background, a slide giving way to a dark
 //! screen looks like content added everywhere.
 //!
+//! Scrolling (2026-10-14) is a state whose changed rows show the saved state's rows moved
+//! by one offset (`scroll_match`). Such a position is not saved at the final quiet: it waits
+//! for the next change. If that is a further scroll the same way that still overlaps the
+//! saved state, the position in between is dropped (the two cover it); otherwise it is
+//! saved. So a scrolled document keeps its first position, the last, and the ones needed
+//! so that everything shown stays in some saved image.
+//!
 //! Protocol for the caller (the session engine):
 //! - Call [`Detector::step`] once per sample, in time order, and apply the returned events
 //!   in order.
