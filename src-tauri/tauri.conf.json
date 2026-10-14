@@ -21,6 +21,15 @@
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
     "macOS": {
       "signingIdentity": "ZoomSlidesPicker Local Signing"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIyMkVGN0U5N0E3MzFERTEKUldUaEhYTjY2ZmN1c2gwM3FGb2tESW5ZbVNiZ1U3R3doRFZnV0piMUx1bE1FOHpYVHgra0Fwck0K",
+      "endpoints": [
+        "https://github.com/terasaki-8910/ZoomSlidesPicker-releases/releases/latest/download/latest.json"
+      ]
     }
   }
 }
