@@ -82,6 +82,9 @@ pub fn open_folder<R: Runtime>(app: &AppHandle<R>) {
 /// the shell lock is not held while the PDF is written.
 pub fn rebuild_pdf<R: Runtime>(app: &AppHandle<R>) -> Result<usize, String> {
     let shell_state = app.state::<SharedShell>();
+    let lang = settings::effective_language(shell_state.lock().unwrap().settings.language);
+    // A PDF job: refused while installing, and the install waits for it (updates.rs).
+    let _job = crate::updates::begin_pdf_job(app, lang)?;
     let (dir, lang) = {
         let shell = shell_state.lock().unwrap();
         let lang = settings::effective_language(shell.settings.language);

@@ -322,3 +322,28 @@ pub fn library_export_base_name(lang: Lang) -> &'static str {
         Lang::En => "Selected images",
     }
 }
+
+/// In-app updates (docs/impl/updates.md): returned by the commands that refuse to start
+/// while an update installs. Matches the contract's `update_in_progress` wording.
+pub fn update_in_progress(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Ja => "更新しています。終わるとアプリが再起動します。",
+        Lang::En => "Updating. The app restarts when it's done.",
+    }
+}
+
+/// `install_update` while a session is active; same wording as the dialog's `update.busy`.
+pub fn update_busy(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Ja => "記録中は更新できません。停止すると更新できます。",
+        Lang::En => "You can't update while recording. Stop to update.",
+    }
+}
+
+/// `install_update` with no update found by the launch or the manual check.
+pub fn update_nothing_found(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Ja => "更新が見つかりません。もう一度確認してください。",
+        Lang::En => "No update was found. Check again.",
+    }
+}

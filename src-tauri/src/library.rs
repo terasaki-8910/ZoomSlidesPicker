@@ -633,6 +633,7 @@ pub async fn export_pdf(
     indices: Option<Vec<usize>>,
 ) -> Result<PdfExport, String> {
     let lang = current_lang(&app);
+    let _job = crate::updates::begin_pdf_job(&app, lang)?;
     let session_dir = resolve_session_dir(&app, &dir, lang)?;
     if is_recording(&app, &session_dir) {
         return Err(i18n::library_recording_locked(lang).to_string());
@@ -692,6 +693,7 @@ pub async fn set_session_memo(app: AppHandle, dir: String, memo: String) -> Resu
 #[tauri::command]
 pub async fn trash_session(app: AppHandle, dir: String) -> Result<(), String> {
     let lang = current_lang(&app);
+    let _job = crate::updates::begin_pdf_job(&app, lang)?;
     let session_dir = resolve_session_dir(&app, &dir, lang)?;
     if is_recording(&app, &session_dir) {
         return Err(i18n::library_recording_locked(lang).to_string());
@@ -711,6 +713,7 @@ pub async fn trash_captures(
     indices: Vec<usize>,
 ) -> Result<usize, String> {
     let lang = current_lang(&app);
+    let _job = crate::updates::begin_pdf_job(&app, lang)?;
     let session_dir = resolve_session_dir(&app, &dir, lang)?;
     if is_recording(&app, &session_dir) {
         return Err(i18n::library_recording_locked(lang).to_string());

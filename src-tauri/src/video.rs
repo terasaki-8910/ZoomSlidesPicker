@@ -47,6 +47,7 @@ fn current_lang<R: Runtime>(app: &AppHandle<R>) -> Lang {
 /// main thread (the `async` command in `commands.rs`; `extract_video_from_menu` below).
 pub fn extract_video<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let lang = current_lang(app);
+    crate::updates::ensure_not_installing(app, lang)?;
     if !zsp_capture::mp4::ffmpeg_available() {
         return Err(i18n::error_ffmpeg_missing(lang).to_string());
     }
@@ -82,6 +83,8 @@ pub fn extract_video<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     // Held from the "no session yet" check until the new session is stored (as in
     // session_start). Nothing below waits for the main thread.
     let mut shell = shell_state.lock().unwrap();
+    // Checked again under the lock: `install_update` sets its flag under this lock too.
+    crate::updates::ensure_not_installing(app, lang)?;
     if shell.session.is_some() {
         return Err(i18n::error_session_already_running(lang).to_string());
     }
