@@ -619,20 +619,32 @@ const PDF_BASE_OVERHEAD: u64 = 1024;
 const PDF_PAGE_OVERHEAD: u64 = 400;
 
 /// Predicted size of the PDF [`write_pdf`] would write for `images`: encodes up to 8 evenly
-/// spaced images at `quality`, scales their bytes by `images.len() / sampled`, and adds the
-/// PDF overhead. 0 for no images.
+/// spaced images at `quality`, takes their output-to-PNG size ratio, applies it to the
+/// PNG bytes of all `images`, and adds the PDF overhead. 0 for no images.
+///
+/// Scaling by the images' PNG sizes rather than by count alone matters: slides differ by
+/// more than 10x in size (a name screen against a photo), so a handful of samples scaled by
+/// count is far off on real sessions.
 pub fn estimate_pdf_bytes(images: &[PathBuf], quality: PdfQuality) -> io::Result<u64> {
     let count = images.len();
     if count == 0 {
         return Ok(0);
     }
     let sampled = count.min(ESTIMATE_SAMPLES);
+    // Midpoints of `sampled` equal parts, so neither end of a session is over-weighted.
     let picks: Vec<PathBuf> = (0..sampled)
-        .map(|i| images[i * count / sampled].clone())
+        .map(|i| images[(2 * i + 1) * count / (2 * sampled)].clone())
         .collect();
-    let mut total: u64 = 0;
-    encode_pages(&picks, quality, |page| total += page.data.len() as u64)?;
-    let scaled = (total as u128 * count as u128 / sampled as u128) as u64;
+    let mut encoded: u64 = 0;
+    encode_pages(&picks, quality, |page| encoded += page.data.len() as u64)?;
+    let png_bytes = |paths: &[PathBuf]| -> io::Result<u64> {
+        paths
+            .iter()
+            .try_fold(0u64, |sum, p| Ok(sum + fs::metadata(p)?.len()))
+    };
+    let sampled_png = png_bytes(&picks)?.max(1);
+    let all_png = png_bytes(images)?;
+    let scaled = (encoded as u128 * all_png as u128 / sampled_png as u128) as u64;
     Ok(scaled + PDF_BASE_OVERHEAD + PDF_PAGE_OVERHEAD * count as u64)
 }
 
