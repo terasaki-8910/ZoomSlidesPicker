@@ -1,134 +1,221 @@
+<p><img src="src-tauri/icons/128x128@2x.png" width="72" alt="ZoomSlidesPicker のアイコン"></p>
+
 # ZoomSlidesPicker
 
-授業の画面（Zoom のライブ、SharePoint の動画の再生など）から、先生がスライドを切り替えるたびにその画像を自動で保存し、授業の後にスライド一式（PNG と PDF）を手元に残す。Mac と Windows で動く常駐アプリ。
+**授業を見ながら、スライドを自動で手元に残す。**
 
-仕様は [SPEC.md](SPEC.md)、合格の条件は [ACCEPTANCE.md](ACCEPTANCE.md)、判断の記録は [DECISIONS.md](DECISIONS.md)。
+Zoom のライブ授業や SharePoint の録画再生など、選んだ窓のスライドが変わるたびに画像を保存するデスクトップアプリ。段階表示・動画・操作バー・同じスライドへの戻りを見分け、授業の後に PNG と PDF を残す。
+
+**Tauri v2 · React 19 · TypeScript · Rust ｜ macOS / Windows**
+
+[ダウンロード](https://github.com/terasaki-8910/ZoomSlidesPicker-releases/releases/latest) · [アーキテクチャ](#アーキテクチャ) · [判定の流れ](#判定の流れ) · [開発](#開発)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
+  <img src="docs/images/hero-light.png" alt="履歴の一覧と、選んだ記録のスライドを表示している ZoomSlidesPicker">
+</picture>
+
+<sub>スクリーンショットと操作デモは、実際の React 画面を既存の IPC モックで動かして撮影したもの。授業名・スライド・保存先は架空のサンプルで、実際の授業や個人情報は含まない。OS のキャプチャ処理と検出エンジンはモックの対象。</sub>
+
+## なぜ作ったか
+
+授業に集中しながら、スライドが替わるたびに手でスクリーンショットを撮るのは難しい。録画を見直して必要な画面を拾うのにも時間がかかる。一方、一定間隔で撮るだけでは、同じスライドや箇条書きの途中、再生中の動画ばかりが増えてしまう。
+
+そこで、授業の窓から「残すべき状態」を選んで保存するアプリを作った。画像処理は端末内で行い、Zoom や SharePoint のアカウント連携は不要。実際の授業で見つかった、講師のカメラによる重複・操作バーの写り込み・窓を見失った後の停止などを、再現する fixture とともに改善している。
+
+## 動いている様子
+
+記録中のパネルから「今すぐ保存」→ 一時停止 → 再開 → 停止。保存枚数と状態が変わり、停止後は保存先を開いたり PDF を作り直したりできる。
+
+<p><img src="docs/images/demo.gif" width="320" alt="記録中のパネルで保存・一時停止・再開・停止を操作するデモ"></p>
+
+<sub>操作デモは IPC モック。自動検出の仕組みは下のフロー図、検証条件は ACCEPTANCE.md を参照。</sub>
 
 ## できること
 
-- 授業の窓を選び、スライドの部分を囲むと、スライドが変わるたびに保存する。他の窓が重なっても、選んだ窓の中身を撮る（macOS で確認済み。ただし、完全に隠れた窓をブラウザが描き直し続けるかは未確認）。
-- スライドの中で動画や Web カメラの映像が動いている間は保存しない。動画が止まったら、その見た目を 1 枚保存する（止まってから 15 秒後か、次のスライドに替わったとき）。
-- 録画の講義に講師のカメラが小さく重なっていても、カメラの変化だけでは保存しない。
-- 再生ボタンを押したときやマウスを動かしたときに出るプレーヤーの操作バーは保存しない。バーが出ている間に替わったスライドは、バーが消えた後の版に置き換える。
-- 箇条書きが順に出るスライドは、最後の状態を 1 枚にまとめる（暗い背景のスライドでも、横に黒い帯がある画面でも同じ）。先生が話してから次の行を出すときも、保存した 1 枚を新しい版に置き換える（前の版はごみ箱へ）。ペンの書き込みも同じ。
-- 前のスライドに戻っても、同じ画像は保存しない（戻った時刻は記録する）。
-- 文書を少しずつスクロールしたときは、途中の位置をすべては残さない。最初と最後の位置と、見えた内容がどれかの 1 枚に残るのに要る位置だけを保存する。
-- 遅れて鮮明になる画面共有では、鮮明になった版を保存する。
-- 黒や灰色の画面は保存しない。10 秒続いたら通知する（共有の停止、キャプチャ防止、最小化の可能性）。
-- 停止すると、保存した画像を 1 つの PDF（`slides.pdf`）にまとめる（標準の画質）。PDF を書き終わるまで、アイコンと表示は「PDF を作成中…」になる。
-- 一時停止、今すぐ保存、直前の保存の取り消し。どれも全体のショートカットでも操作できる。
-- 動画ファイル（mp4、mov、m4v）から同じ判定で抽出する（PC に ffmpeg が必要）。
-- 履歴の窓：これまでの記録を一覧し、題名・日付・アプリ名・メモで探す。フォルダや PDF を開く、名前を変える、メモを書く、要らない画像や記録をごみ箱へ移す、同じスライドをまとめる。窓の上の帯から記録を始めたり止めたりできる。
-  - PDF を書き出す…：高画質（劣化なし）、標準、軽量から選ぶ。それぞれの大きさの見込みが出る。記録全体なら `slides.pdf` を作り直し、選んだ画像だけなら同じフォルダに「選んだ画像 YYYY-MM-DD.pdf」を作る。
-  - 画像を選ぶときは、Shift を押しながら押すとその画像までをまとめて選び、⌘（Windows は Ctrl）を押しながら押すと 1 枚ずつ切り替える。選んだ画像で PDF を書き出す、ごみ箱へ移す、選んでいない画像をごみ箱へ移す、ができる。
-  - 左の一覧の記録を右クリックすると、フォルダを開く、PDF を開く、PDF を書き出す…、名前を変更、ごみ箱へ…のメニューが出る。
-- どの窓でも、ブラウザのショートカット（Ctrl+J のダウンロード、Ctrl+P の印刷など）とブラウザの右クリックメニューは働かない。
+| 機能 | 振る舞い |
+|---|---|
+| **窓と範囲を選んで記録** | デスクトップ全体ではなく、授業の窓そのものを撮る。窓の中でスライド部分を囲み、リサイズ後も割合で追従する。別の窓が重なっても対象の中身を取得できることを macOS で確認済み |
+| **必要な状態を選ぶ** | 箇条書きやペンの追記は最後の版にまとめる。鮮明化した画面を優先し、同じスライドへの戻りは画像を増やさず時刻を残す |
+| **動画・カメラ・操作バーへの対処** | 動く領域による重複を抑え、動画が止まった状態を保存。操作バーが消えた版で置き換える。文書スクロールの冗長な途中位置も省く |
+| **PNG と PDF を残す** | 停止時に PDF を自動作成。後から高画質・標準・軽量の 3 種類と容量の見込みを比べ、全画像または選んだ画像だけを書き出せる |
+| **授業後に探して整理** | 題名・日付・アプリ名・メモで検索。名前変更、メモ、重複候補の抽出、Shift / ⌘・Ctrl の複数選択、ごみ箱への移動 |
+| **常駐して操作** | メニューバー／通知領域から開始・一時停止・保存・取り消し。窓を見失ったら待機し、戻れば自動再開。手動の一時停止は勝手に再開しない |
+| **動画ファイルから抽出** | mp4 / mov / m4v に同じ判定を適用。FFmpeg と ffprobe の導入が必要 |
+| **設定と更新** | 日本語 / English、OS に従うライト / ダーク、保存先、比較周期、全体ショートカット。起動時と設定から更新を確認し、記録中の再起動を防ぐ |
+
+### 範囲を決める・記録を操作する
+
+| スライドの範囲選択 | 記録中のパネル |
+|---|---|
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/feature-region-dark.png"><img src="docs/images/feature-region-light.png" alt="授業の窓の画像をドラッグし、保存するスライド部分を指定"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/feature-running-dark.png"><img src="docs/images/feature-running-light.png" width="240" alt="12 枚を保存した記録中パネル。今すぐ保存・取り消し・一時停止・停止"></picture> |
+
+### 授業後に整理・書き出す
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/feature-selection-dark.png">
+  <img src="docs/images/feature-selection-light.png" alt="Shift で 6 枚を範囲選択。選んだ画像だけ PDF に書き出す操作やごみ箱への移動">
+</picture>
+
+| PDF の画質と容量を比較 | 記録ごとの操作 |
+|---|---|
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/feature-export-dark.png"><img src="docs/images/feature-export-light.png" alt="PDF の高画質・標準・軽量と、それぞれの容量の見込み"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/feature-menu-dark.png"><img src="docs/images/feature-menu-light.png" alt="記録の右クリックメニュー。フォルダ、PDF、名前変更、ごみ箱"></picture> |
+
+<details>
+<summary>設定画面</summary>
+
+<sub>更新テスト用モックの仮のバージョンを表示。</sub>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/feature-settings-dark.png">
+  <img src="docs/images/feature-settings-light.png" width="640" alt="言語・保存先・比較周期・ショートカット・アップデート確認の設定">
+</picture>
+
+</details>
+
+## アーキテクチャ
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagram-architecture-dark.png">
+  <img src="docs/images/diagram-architecture-light.png" alt="React から Tauri の型付き IPC を通して Rust の記録エンジンを操作し、窓または動画から検出・保存する構成図">
+</picture>
+
+- **判定を純粋な Rust crate にした。** `zsp-detect` は OS・I/O・UI に依存しない。同じ入力を再生して回帰を確かめられ、ライブの窓と動画ファイルで同じ判定を使える。
+- **取得・判定・保存を `zsp-session` がつなぐ。** ワーカースレッドがフレームと操作を処理し、UI には状態とイベントを渡す。フル解像度の画像を授業の長さに比例してメモリにためず、保存には元解像度、比較には縮小した解析画像を使う。
+- **OS とファイル操作は Rust 側に置いた。** React は型付きの IPC ラッパーを介して操作する。記録本体の `session.json` と、後から編集する名前・メモの `meta.json` も分け、記録処理と整理操作が同じファイルを上書きしない。
+- **画面とエンジンを別々に検証する。** IPC モックで UI を単独起動できる。合成の授業画面で判定を再現し、実際の使用で見つかった不具合を fixture に追加する。
+- **画像は端末内に保存する。** クラウドの画像認識 API や授業画像を受け取るサーバーは使わない。アプリ内更新では GitHub Releases に接続し、更新ファイルの署名を検証する。
+
+## 判定の流れ
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagram-detection-flow-dark.png">
+  <img src="docs/images/diagram-detection-flow-light.png" alt="フレーム解析、単色と動く領域の除外、安定待ち、保存・置換・再訪・スクロールの判定フローチャート">
+</picture>
+
+単純な画像差分だけだと、カメラの動きやプレーヤーの操作バーまで別スライドになる。そこで「どこが動き続けるか」「文字や線が増えただけか」「以前の状態と同じか」を分けて判定する。解析は輝度を使うため、**明るさが同じで色だけが変わる変化は検出しない**。再現できる規則で処理し、不得意な変化も明示している。
+
+判定条件の詳細は [SPEC.md](SPEC.md#判定)、実装は [crates/zsp-detect](crates/zsp-detect)、合格条件は [ACCEPTANCE.md](ACCEPTANCE.md)。
+
+## 技術スタック
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagram-stack-dark.png">
+  <img src="docs/images/diagram-stack-light.png" alt="React、TypeScript、Vite、Tauri、Rust、xcap、FFmpeg、pdf-writer と Cargo・Vitest・Playwright の技術スタック図">
+</picture>
 
 ## 使い方
 
-1. 起動すると履歴の窓が開き、メニューバー（Windows は通知領域）にアイコンが出る。履歴の窓を閉じても常駐は続く。アプリをもう一度開くと、履歴の窓がまた開く。
-2. 履歴の窓の上の「開始」（またはアイコンを押して出るパネルの「開始」）を押し、授業の窓を選ぶ。
-3. 選んだ窓の画像の上で、スライドの部分をドラッグで囲み、Enter（または「開始」）。囲まずに Enter を押すと窓全体。
-4. 授業の間は放っておいてよい。保存した枚数はアイコンの横（Windows はツールチップ）と履歴の窓に出る。
-5. 終わったら「停止」。PDF ができると通知が出る。
+1. アプリを起動し、履歴の窓または常駐パネルの「開始」から授業の窓を選ぶ。
+2. スライドの部分をドラッグで囲み、Enter または「開始」。囲まずに Enter を押すと窓全体を記録する。
+3. 授業中は自動で保存。必要に応じて一時停止・今すぐ保存・直前の保存の取り消しを使う。
+4. 「停止」を押すと「PDF を作成中…」になり、完了を通知する。履歴から検索・整理・書き出しができる。
 
-保存先は `~/Pictures/ZoomSlidesPicker/<開始日時>/`（Windows は `%USERPROFILE%\Pictures\ZoomSlidesPicker\`）。設定（Mac は ⌘,、Windows は Ctrl+,）で変えられる。
+既定の保存先は macOS が `~/Pictures/ZoomSlidesPicker/<開始日時>/`、Windows が `%USERPROFILE%\Pictures\ZoomSlidesPicker\<開始日時>\`。設定（macOS は ⌘,、Windows は Ctrl+,）で変更できる。
 
-フォルダの中身:
+```text
+2026-10-17_0900/
+├── 001_00-03-12.png   # 連番と、開始からの経過時間
+├── 002_00-05-48.png
+├── session.json      # 画像・時刻・再訪・一時停止などの出来事
+├── slides.pdf        # 停止時に自動生成。標準画質が既定
+└── meta.json         # 名前やメモを付けたときだけ作成
+```
 
-- `001_00-03-12.png` など: 連番と、開始からの経過時間（そのスライドが落ち着いた時刻）
-- `session.json`: 各画像の時刻、戻った記録、一時停止などの出来事（形は [docs/session.schema.json](docs/session.schema.json)）
-- `slides.pdf`: 保存した画像を順に並べた PDF。停止したときは標準の画質（JPEG の画質 90）で作る。10/13 の 181 枚の授業で、高画質（劣化なし）264MB、標準 81MB、軽量（幅 1920px、画質 85）38MB
-- `meta.json`: 履歴の窓で付けた名前とメモ（付けたときだけ）
+`session.json` の形式は [JSON Schema](docs/session.schema.json)。PNG は元解像度で保存する。PDF の高画質は劣化なし、標準は JPEG 品質 90、軽量は幅 1920px 以下・JPEG 品質 85。画像を選んで書き出すと、既存の `slides.pdf` を残したまま別の PDF を同じフォルダに作る。
 
-### ショートカット（既定。設定で変えられる）
+### 全体ショートカット
 
-| 操作 | Mac | Windows |
+| 操作 | macOS | Windows |
 |---|---|---|
 | 今すぐ保存 | ⌃⌥⌘S | Ctrl+Alt+Shift+S |
 | 直前の保存を取り消す | ⌃⌥⌘Z | Ctrl+Alt+Shift+Z |
-| 一時停止と再開 | ⌃⌥⌘P | Ctrl+Alt+Shift+P |
+| 一時停止 / 再開 | ⌃⌥⌘P | Ctrl+Alt+Shift+P |
 
-### macOS の画面収録の許可
+設定で変更できる。他のアプリを操作中でも利用できる。
 
-初めて撮るときに「画面収録」の許可が要る。パネルの案内から「システム設定」を開いて ZoomSlidesPicker を許可し、アプリを再起動する。macOS 15 以降は、許可の確認が月に一度ほど出ることがある。
+## インストールと更新
 
-## 入手
+[公開配布用の Releases](https://github.com/terasaki-8910/ZoomSlidesPicker-releases/releases/latest) から、macOS（Apple Silicon）の DMG または Windows（x64）のインストーラーを取得する。
 
-公開の配布用リポジトリ [ZoomSlidesPicker-releases](https://github.com/terasaki-8910/ZoomSlidesPicker-releases/releases/latest) に、Mac（Apple シリコン）の DMG と Windows（x64）のインストーラーを置いている（このリポジトリの Releases にも置く）。
+0.1.7 以降は、起動時と設定の「アップデートを確認」で新版を確認できる。「今すぐ更新」「後で」「この版をスキップ」を選べる。記録・動画抽出中は更新できず、PDF 処理中は完了を待ってから更新する。0.1.6 以前からは一度だけ手動で入れ替える。
 
-0.1.7 からは、起動するたびに新しい版を確かめ、見つかれば履歴の窓に「新しい版があります」が出る（今すぐ更新、後で、この版をスキップ）。設定の一般の「アップデートを確認」でも確かめられる。記録中は更新できない。0.1.6 以前から 0.1.7 へは、手で 1 回入れ替える。
+macOS では初回に「画面収録」の許可が必要。アプリの案内からシステム設定を開いて許可し、アプリを再起動する。配布ビルドは固定の自己署名を使い、Apple Developer ID による署名・公証は行っていない。「壊れているため開けません」と表示された場合は、配置後に次を実行する。
 
-## 既知の制約
-
-- 主催者がキャプチャ防止を有効にした授業（Zoom の「画面キャプチャの防止」など）は撮れない。黒や灰色の画面として通知される。
-- Mac で、全画面表示の Zoom（別の操作スペース）を撮れるかは未確認。
-- マウスを動画の上に置いたままにして再生バーが最後まで出続けると、バーが写った版が残る。録画の再生中はマウスを動画の外に置く。範囲は Zoom の操作バーを避けて選ぶ（範囲に入っても、バーが出ただけでは保存しない。バーが出たまま替わったスライドは、バーが消えた後の版に置き換える）。
-- 範囲の端いっぱいに暗い帯が足される段階表示は、操作バーと見分けられず、見落とす。
-- 動画の中に写っている操作ボタン（講師の画面の PowerPoint の操作ボタンなど）は、スライドの一部として保存される。PowerPoint のスライドショーでマウスを動かすと左下に出る操作ボタンは、消えると別の 1 枚として保存されることがある（2026-10-13 の授業で 3 組）。
-- Zoom で誰も画面を共有していないときの画面（参加者の名前やカメラ）も保存する。
-- 同じスライドが、位置や大きさを変えて映ったときは、別の 1 枚として保存する。共有画面の中の写真や動画が動いたときも、保存が増えることがある（2026-10-13 の授業で確認。今回は直していない）。
-- 講師のカメラが映り始めてすぐ（数十秒）に大きく動くと、同じスライドを 1 枚余分に保存することがある。
-- 画面がロックされている間やディスプレイが眠っている間は、ブラウザが画面を描かないので、新しいスライドは保存できない（2026-10-07 に確認）。
-- 同じ窓の中でブラウザのタブを切り替えると、そのタブの内容が保存される。録画は専用の窓で開く。
-- 明るさが同じで色だけが変わる変化は検出しない。
-- 判定の数値は合成の画面で調整した。実際の授業での精度は、使いながら確かめる段階。
-- 署名と公証をしていない。macOS で「壊れているため開けません」と出たら、`xattr -cr /Applications/ZoomSlidesPicker.app` を実行してから開く。0.1.4 までは版ごとに署名が変わったので、入れ替えるたびに画面収録の許可が要った。0.1.5 からはこの Mac の固定の自己署名で署名するので、0.1.5 に入れ替えたときに一度許可し直せば、その後の版でも許可が続く（システム設定の一覧に古い項目が残っていたら、消してから許可し直す）。
+```sh
+xattr -cr /Applications/ZoomSlidesPicker.app
+```
 
 ## 開発
 
-構成:
-
-| 場所 | 中身 |
-|---|---|
-| `crates/zsp-detect` | 判定（解析画像と、保存するかどうかの判断）。参照実装は `samples/proto/detect.py` |
-| `crates/zsp-output` | PNG、`session.json`、PDF、ごみ箱 |
-| `crates/zsp-capture` | 窓の一覧とキャプチャ（xcap）、範囲、mp4（ffmpeg）、macOS の権限 |
-| `crates/zsp-session` | 上の 3 つをつなぐエンジン（スレッド、操作、窓を見失ったとき） |
-| `src-tauri` | 常駐アイコン、窓、ショートカット、通知、設定、コマンド |
-| `src` | 画面（React）。Rust とのやり取りは [docs/impl/ipc.md](docs/impl/ipc.md) |
-| `fixtures` | テスト用の合成の授業画面（`samples/fixture/` で生成） |
-| `spike` | キャプチャの検証用（ラウンド 1）。Windows での確認手順は `docs/WINDOWS-CHECK.md` |
-
-コマンド:
+フロントエンドの検証環境は Node.js 24.19.0 / pnpm 11.12.0。Rust（Edition 2024 対応）と [Tauri v2 の開発環境](https://v2.tauri.app/start/prerequisites/) も必要。動画抽出と、その統合テストには `ffmpeg` / `ffprobe` が PATH 上に必要。fixture はコミット済みなので、通常の Rust テストに Python は不要。
 
 ```sh
 pnpm install
-sh scripts/check.sh          # すべての検査（Rust のテスト・fmt・clippy、画面のテスト・lint・UI チェック）
-pnpm tauri dev               # 開発用に起動
-pnpm tauri build             # 配布物（macOS は .app と .dmg）
+pnpm tauri dev          # ネイティブアプリを開発用に起動
+sh scripts/check.sh     # Rust / フロントエンド / UI・axe の検査
+pnpm build             # TypeScript の型チェックとフロントエンドの本番ビルド
 ```
 
-Windows 用のインストーラーは Mac でも作れる（手順は `docs/WINDOWS-CHECK.md` の最後）。
+OS の権限や実際の保存先を使わず UI を動かす場合:
 
-テスト用の環境変数（受け入れの確認用。普段は使わない）:
+```sh
+VITE_IPC_MOCK=1 pnpm dev
+# http://localhost:1420/?preset=stopped#/library
+# http://localhost:1420/?preset=running#/panel
+# http://localhost:1420/#/region
+# http://localhost:1420/#/settings
+```
 
-| 変数 | 働き |
+更新用の秘密鍵を使わないローカルビルド:
+
+```sh
+# macOS: 個人の署名証明書がない環境では signingIdentity を上書き
+pnpm tauri build --config src-tauri/tauri.local.conf.json \
+  --config '{"bundle":{"macOS":{"signingIdentity":"-"}}}'
+```
+
+通常の `pnpm tauri build` は更新ファイルも生成するため、リリース用の署名鍵が必要。上のコマンドは更新ファイルを生成しない確認用ビルドで、個人の自己署名証明書にも依存しない。
+
+### 検証
+
+| 対象 | 手段 |
 |---|---|
-| `ZSP_AUTOSTART_TITLE` | 起動時に、題名にこの文字列を含む窓で記録を始める（窓全体） |
-| `ZSP_AUTOSTART_SECONDS` | その秒数で停止して終了する |
-| `ZSP_SAVE_ROOT` | 保存先を差し替える（設定には書かない）。他の変数がなくても効く |
-| `ZSP_OPEN_WINDOW` | 起動時に `panel`、`settings`、`region`、`library` の窓を開く。`region` は `ZSP_AUTOSTART_TITLE` の窓を使い、記録は始めない。どれかの変数があると、起動時に履歴の窓は開かない（`library` を指定したときを除く） |
+| 判定・出力・記録制御 | `cargo test --workspace`。F1〜F13 の合成画面、画像解析・PDF・JSON Schema・窓の喪失と復帰など |
+| 検出速度 | `cargo test --release -p zsp-detect --test timing`。2000×1400 のフレーム解析と判定の中央値が 20ms 以内 |
+| UI の振る舞い | `pnpm test`。Vitest / Testing Library で選択・書き出し・更新・言語などを検証 |
+| 実際のブラウザ描画 | `sh scripts/ui-check.sh`。IPC モック + Playwright / axe、ライト・ダーク、通常・狭幅、英語の基本動作 |
+| 静的検査 | Rustfmt / Clippy、ESLint、絵文字・トークン外の色リテラルの検査 |
 
-実際の画面で判定を試す（記録した窓の連番と `index.tsv` を判定に通し、保存する所を表示する。記録には授業の内容が写るので、リポジトリには入れない）:
+macOS の実機では、窓全体を他の窓で覆った状態で対象だけを撮影し、重複した戻りを保存しないことを確認済み。10 分間・2000×1400・0.5 秒周期の測定は、最大メモリ **118.6 MiB**、平均 CPU **4.56%**（2026-10-07 の開発機での個別測定。結果は [PLAN.md](PLAN.md)）。一般的な性能保証ではない。
 
-```sh
-cargo run --release -p zsp-detect --example replay -- <記録のフォルダ> <x> <y> <w> <h>
-cargo run -p zsp-detect --example trace_fixture -- F7   # fixture での判定の出来事
-```
+### リポジトリ構成
 
-記録中のセッションの窓を 1 秒ごとに縮小画像で残し、保存と突き合わせる（画像そのものは残さない）。縮小画像は fixture と同じ形に直して、判定に通し直せる（`ZSP_CFG=live_min_cells=6` のように数値を差し替えられる）:
+| パス | 内容 |
+|---|---|
+| [`src/`](src) | React の各画面、日英の文言、型付き IPC とモック |
+| [`src-tauri/`](src-tauri) | Tauri アプリ、OS 連携、設定、履歴、更新 |
+| [`crates/zsp-capture/`](crates/zsp-capture) | xcap・動画ファイルの入力・範囲・macOS 権限 |
+| [`crates/zsp-detect/`](crates/zsp-detect) | I/O に依存しない画像解析と保存判定 |
+| [`crates/zsp-session/`](crates/zsp-session) | 入力・判定・保存をつなぐ記録エンジン |
+| [`crates/zsp-output/`](crates/zsp-output) | PNG・JSON・PDF・ごみ箱 |
+| [`fixtures/`](fixtures) / [`samples/`](samples) | 合成の授業画面、参照実装、検証スクリプト |
+| [`tests/ui/`](tests/ui) | Playwright と axe の画面検証 |
+| [`docs/diagrams/`](docs/diagrams) / [`docs/images/`](docs/images) | README 図の HTML/CSS と画像。再生成: `node scripts/readme-assets.mjs` |
 
-```sh
-.venv/bin/python samples/verify/record_grids.py <窓の ID> <セッションのフォルダ> grids.npz
-.venv/bin/python samples/verify/verify_session.py <セッションのフォルダ> grids.npz
-.venv/bin/python samples/verify/grids_to_fixture.py grids.npz <作業用のフォルダ>
-cargo run --release -p zsp-detect --example trace_fixture -- <作業用のフォルダ>
-```
+検証用の環境変数、再生・fixture 生成、画像の再生成は [開発手順](docs/DEVELOPMENT.md)。仕様は [SPEC.md](SPEC.md)、合格条件は [ACCEPTANCE.md](ACCEPTANCE.md)、判断の理由と過去の検証は [DECISIONS.md](DECISIONS.md)。
 
-fixture の作り直し（`samples/fixture/fixture.py` を変えたときだけ。`F7` のように番号を付けると、その fixture だけ）:
+## 既知の制約
 
-```sh
-python3 -m venv .venv && .venv/bin/pip install numpy pillow
-.venv/bin/python samples/fixture/export_fixtures.py
-```
+- **Windows の実機検証が残る。** x64 インストーラーを配布しているが、現在の受入項目 D2・D5・D7 は未完了。macOS の結果を Windows の保証にはしていない。
+- **キャプチャ防止・描画停止には対応できない。** 保護された授業、画面ロック・ディスプレイのスリープ中は取得できない。macOS の全画面 Zoom（別の操作スペース）と、完全に隠れた窓の継続再描画は未確認。同じ窓で別タブに切り替えると、そのタブが写るので録画は専用の窓で開く。
+- **重複や不要な画面が残る場合がある。** 同じスライドでも位置・大きさが変わると別扱いになる。共有していないときの参加者画面、共有画面内の写真・動画、PowerPoint の操作ボタン、小さな講師映像の動きなどで保存が増えることがある。
+- **操作バーとの境界は完全には区別しない。** マウスを動画の上に置いたままバーが消えない場合、その版が残る。範囲の端いっぱいに暗い帯を足す段階表示は、操作バーと誤認する場合がある。
+- **輝度に基づく規則で判定する。** 同じ明るさの色変化は検出しない。合成の画面で条件を調整し、実際の授業で精度を検証・改善している段階。
+- **コード署名と更新署名は別。** 更新ファイルの署名検証は実装済みだが、macOS の配布は Developer ID・公証なし。0.1.5 以降は固定の自己署名を使用している。
+
+## ライセンスとアイコン
+
+本リポジトリにはオープンソースライセンスを設定していない（Cargo の設定は `UNLICENSED`）。
+
+UI と図版のアイコンは [React Icons](https://github.com/react-icons/react-icons) を通して利用。図版は [Simple Icons（CC0）](https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md) と [Tabler Icons（MIT）](https://github.com/tabler/tabler-icons/blob/main/LICENSE)。各ロゴは対応する技術を示すために使用している。

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><title>ZoomSlidesPicker architecture</title>
+<link rel="stylesheet" href="diagram.css">
+<main id="canvas">
+  <div class="eyebrow">ARCHITECTURE / LOCAL DESKTOP APP</div>
+  <h1>画面を選ぶ。判定する。手元に残す。</h1>
+  <p class="intro">キャプチャと画像処理は端末内で実行。操作画面と、OS・ファイルに触る処理を IPC で分ける。</p>
+  <div class="topology">
+    <section class="node"><span class="icon" data-icon="si:SiReact"></span><div><h2>React + TypeScript</h2><p>履歴・範囲選択・パネル・設定</p><code>src/ → src/ipc/</code></div></section>
+    <div class="arrow"><span>⇄</span><small>commands / events</small></div>
+    <section class="node"><span class="icon" data-icon="si:SiTauri"></span><div><h2>Tauri v2 / Rust</h2><p>コマンド・トレイ・通知・ショートカット・設定</p><code>src-tauri/</code></div></section>
+  </div>
+  <div class="down">↓</div>
+  <div class="band">
+    <p class="band-title">RUST WORKSPACE — 記録エンジンと 3 つの責務</p>
+    <div class="engine-grid">
+      <section class="node"><span class="icon" data-icon="tb:TbCapture"></span><h3>入力を取り込む</h3><p>授業の窓 → xcap<br>動画ファイル → FFmpeg<br>指定した範囲を切り出す</p><code>zsp-capture</code></section>
+      <div class="arrow">→</div>
+      <section class="node engine"><span class="icon" data-icon="tb:TbCpu"></span><h3>記録を制御する</h3><p>取得・保留フレーム・操作を<br>ワーカースレッドで管理</p><code>zsp-session</code><div class="inset"><h3>保存するか判定</h3><p>追記・動画・重複・スクロール</p><code>zsp-detect / pure Rust</code></div></section>
+      <div class="arrow">→</div>
+      <section class="node"><span class="icon" data-icon="tb:TbFiles"></span><h3>ファイルに保存</h3><p>元解像度の PNG<br>時刻・出来事の JSON<br>画質を選べる PDF</p><code>zsp-output</code><div class="inset"><p>Pictures/<br>ZoomSlidesPicker/<br>記録ごとに 1 フォルダ</p></div></section>
+    </div>
+  </div>
+  <section class="band update"><span class="icon" data-icon="tb:TbShieldCheck"></span><div><strong>アプリの更新だけ GitHub Releases へ</strong><p>起動時／設定から確認 → 署名を検証してインストール。記録・PDF 処理中は更新による再起動を防ぐ。<br>授業画像の送信先となるサーバーや、クラウドの画像認識 API は使わない。</p></div></section>
+  <div class="footer">実線の矢印はフレームと保存処理の流れ。React は型付き IPC ラッパーを通して操作し、ファイルを直接読み書きしない。</div>
+</main></html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><title>ZoomSlidesPicker technology stack</title>
+<link rel="stylesheet" href="diagram.css">
+<main id="canvas">
+  <div class="eyebrow">TECHNOLOGY STACK</div>
+  <h1>UI は Web 技術、検出と保存は Rust。</h1>
+  <p class="intro">フレームの比較はネットワークや機械学習モデルに依存しない。OS 境界と純粋な判定を分離する。</p>
+  <div class="stack-row"><div class="stack-label">操作画面</div><div class="stack-items">
+    <section class="stack-item"><span class="icon" data-icon="si:SiReact"></span><h2>React 19</h2><p>履歴・範囲選択・設定<br>日本語 / English</p></section>
+    <section class="stack-item"><span class="icon" data-icon="si:SiTypescript"></span><h2>TypeScript 5</h2><p>IPC の型と画面の状態<br>React Icons</p></section>
+    <section class="stack-item"><span class="icon" data-icon="si:SiVite"></span><h2>Vite 7 + pnpm 11</h2><p>開発サーバー・Web ビルド<br>IPC モックで単独起動</p></section>
+  </div></div>
+  <div class="stack-row"><div class="stack-label">デスクトップ</div><div class="stack-items">
+    <section class="stack-item"><span class="icon" data-icon="si:SiTauri"></span><h2>Tauri v2</h2><p>OS の WebView を利用<br>トレイ・通知・更新</p></section>
+    <section class="stack-item"><span class="icon" data-icon="si:SiRust"></span><h2>Rust / Edition 2024</h2><p>4 つのコア crate + アプリ<br>判定・I/O・スレッド制御</p></section>
+    <section class="stack-item"><span class="icon" data-icon="tb:TbDevices"></span><h2>macOS / Windows</h2><p>Mac は実機検証あり<br>Windows は検証項目が残る</p></section>
+  </div></div>
+  <div class="stack-row"><div class="stack-label">入出力</div><div class="stack-items">
+    <section class="stack-item"><span class="icon" data-icon="tb:TbCapture"></span><h2>xcap 0.9.8</h2><p>窓の ID を指定して取得<br>他の窓の重なりを避ける</p></section>
+    <section class="stack-item"><span class="icon" data-icon="si:SiFfmpeg"></span><h2>FFmpeg / ffprobe</h2><p>mp4・mov・m4v の抽出用<br>任意導入・バイナリは同梱しない</p></section>
+    <section class="stack-item"><span class="icon" data-icon="tb:TbFileTypePdf"></span><h2>image + pdf-writer</h2><p>PNG / JSON / PDF<br>圧縮・原寸保存・OS のごみ箱</p></section>
+  </div></div>
+  <div class="stack-row"><div class="stack-label">品質を確かめる</div><div class="stack-items">
+    <section class="stack-item"><span class="icon" data-icon="si:SiRust"></span><h2>Cargo</h2><p>test / fmt / Clippy<br>合成 fixture F1〜F13・性能計測</p></section>
+    <section class="stack-item"><span class="icon" data-icon="si:SiVitest"></span><h2>Vitest + ESLint</h2><p>Testing Library<br>振る舞い・操作・言語・配色規約</p></section>
+    <section class="stack-item"><span class="icon" data-icon="tb:TbBrowserCheck"></span><h2>Playwright + axe</h2><p>ライト / ダーク・通常 / 狭幅<br>キーボード・アクセシビリティ</p></section>
+  </div></div>
+  <div class="footer">アイコン: Simple Icons / Tabler Icons（react-icons）。バージョンは package.json・Cargo.toml を参照。</div>
+</main></html>
