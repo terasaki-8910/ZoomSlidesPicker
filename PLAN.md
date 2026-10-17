@@ -55,4 +55,4 @@
 - 合格条件: README の相対リンクと画像が存在する、全画像を再生成できる、画像を実際に目視する、`sh scripts/check.sh` と `pnpm build` が通る。Git 履歴の秘密情報・公開画像を確認し、公開後に GitHub API で public を確認する。
 - 作業ブランチ: `docs/portfolio-readme`。検証後にローカルでコミットし `--no-ff` で main に統合する。
 
-状態: 実装・検証完了、公開作業待ち。README・開発手順・図の HTML/CSS・再生成スクリプト、ライト/ダーク計 20 PNG と操作 GIF を作成。`sh scripts/check.sh`（UI 49 件、フロントエンド 90 件を含む）と `pnpm build` が合格。相対リンク・画像の存在と図版のはみ出しを検査し、全画面と GIF の各場面を目視した。Git 履歴 685 blob の既知の認証情報パターン・秘密ファイル名に検出なし（包括的な秘密情報の不在保証ではない）。
+状態: 完了。README・開発手順・図の HTML/CSS・再生成スクリプト、ライト/ダーク計 20 PNG と操作 GIF を作成。`sh scripts/check.sh`（UI 49 件、フロントエンド 90 件を含む）と `pnpm build` が合格。相対リンク・画像の存在と図版のはみ出しを検査し、全画面と GIF の各場面を目視した。Git 履歴 685 blob の既知の認証情報パターン・秘密ファイル名に検出なし（包括的な秘密情報の不在保証ではない）。`48c4230` を `2255ba8` で main に統合し、承認後に push。GitHub API で `PUBLIC` と README の blob 一致を確認した（2026-10-17）。
