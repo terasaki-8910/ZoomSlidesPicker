@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><title>ZoomSlidesPicker detection flow</title>
+<link rel="stylesheet" href="diagram.css">
+<main id="canvas">
+  <div class="eyebrow">DETECTION FLOW / ZSP-DETECT</div>
+  <h1>画面が変わるたび、すぐに保存はしない。</h1>
+  <p class="intro">既定 0.5 秒ごとの画像から、残すべきスライドを選ぶ。幅 160 の解析画像と細かさの情報で比較する。</p>
+  <section class="node flow-head"><span class="icon" data-icon="tb:TbPhotoScan"></span><h2>指定範囲のフレームを解析</h2><p>元解像度の画像は保存用、縮小した解析画像は判定用。</p></section>
+  <div class="flow-down">↓</div>
+  <div class="flow-row"><div></div><div class="decision"><span class="diamond"></span><div><strong>単色の画面か？</strong><p>黒・灰・白など、内容のないフレームを除外</p></div></div><div class="arrow">→</div><div class="answer"><span class="pill">はい</span><br>保存しない<br>10 秒続けば通知</div></div>
+  <div class="flow-down">いいえ ↓</div>
+  <div class="flow-row"><div></div><div class="decision"><span class="diamond"></span><div><strong>動画・カメラなどの動きか？</strong><p>頻繁に変わる領域を、スライド本体の比較から外す</p></div></div><div class="arrow">→</div><div class="answer"><span class="pill">動く領域</span><br>更新を追跡しつつ待つ<br>静止後の状態を判定</div></div>
+  <div class="flow-down">スライド本体の変化を比較 ↓</div>
+  <section class="node flow-head"><span class="icon" data-icon="tb:TbHourglass"></span><h2>1 秒落ち着いたら、候補を保留</h2><p>追記・鮮明化は候補を更新。一瞬だけ現れて戻る状態は除外。</p></section>
+  <div class="flow-down">↓</div>
+  <div class="flow-row"><div></div><div class="decision"><span class="diamond"></span><div><strong>保存済みの内容と、どんな違いがあるか？</strong><p>追記・重複・スクロールを見分け、確定の条件を満たしたら出力</p></div></div><div></div><div></div></div>
+  <div class="down">↓</div>
+  <div class="outcomes">
+    <section class="node"><span class="icon" data-icon="tb:TbPhotoPlus"></span><h3>新しいスライド</h3><p>5 秒安定、次への切替、停止などの条件で保存。最も鮮明なフレームを残す。</p><code>save → PNG</code></section>
+    <section class="node"><span class="icon" data-icon="tb:TbRefresh"></span><h3>追記・操作バー除去</h3><p>同じスライドの新しい版に置換。箇条書きの最終状態を残す。前の版はごみ箱へ。</p><code>replace → 同じ番号</code></section>
+    <section class="node"><span class="icon" data-icon="tb:TbHistory"></span><h3>同じスライドに戻る</h3><p>画像は増やさず、戻った時刻を記録。直前と同じ状態の継続は記録しない。</p><code>revisit → JSON</code></section>
+    <section class="node"><span class="icon" data-icon="tb:TbArrowsVertical"></span><h3>文書をスクロール</h3><p>途中の冗長な位置を省く。最初・最後と、見えた内容を残すのに必要な位置を保存。</p><code>必要な位置 → PNG</code></section>
+  </div>
+  <div class="footer">理解のために簡略化したフロー。動画が止まった状態は 15 秒後または次の切替で確定する。<br>条件の詳細は SPEC.md「判定」、実装は crates/zsp-detect、回帰テストは fixtures/F1〜F13 を参照。</div>
+</main></html>
