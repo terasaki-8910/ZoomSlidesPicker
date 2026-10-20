@@ -1,0 +1,272 @@
+{
+  "title": "スライド判定の流れ",
+  "width": 1440,
+  "height": 1390,
+  "caption": "zsp-detect / 自動抽出の概要。既定 0.5 秒ごとに解析し、必要な状態を残す。",
+  "groups": [
+    {
+      "id": "results",
+      "x": 60,
+      "y": 1080,
+      "w": 1320,
+      "h": 250,
+      "title": "判定の結果",
+      "c": "core"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "frame",
+      "x": 250,
+      "y": 158,
+      "title": "フレームを解析",
+      "sub": [
+        "幅 160 の輝度・細かさ"
+      ],
+      "icon": "tb:TbPhotoScan",
+      "c": "capture"
+    },
+    {
+      "id": "blank",
+      "x": 700,
+      "y": 135,
+      "kind": "decision",
+      "title": "単色の画面？",
+      "c": "core"
+    },
+    {
+      "id": "motion",
+      "x": 1150,
+      "y": 158,
+      "title": "動く領域を比較から除外",
+      "sub": [
+        "動画・講師のカメラなど"
+      ],
+      "icon": "tb:TbFocus2",
+      "c": "core"
+    },
+    {
+      "id": "skip",
+      "x": 700,
+      "y": 350,
+      "title": "保存しない",
+      "sub": [
+        "単色が 10 秒続いたら通知"
+      ],
+      "icon": "tb:TbPlayerSkipForward",
+      "c": "core"
+    },
+    {
+      "id": "stable",
+      "x": 1150,
+      "y": 350,
+      "kind": "decision",
+      "title": "1 秒安定？",
+      "c": "core"
+    },
+    {
+      "id": "pending",
+      "x": 1150,
+      "y": 530,
+      "title": "候補を保留・更新",
+      "sub": [
+        "追記や鮮明化は候補を更新"
+      ],
+      "icon": "tb:TbHourglass",
+      "c": "core"
+    },
+    {
+      "id": "ready",
+      "x": 1150,
+      "y": 740,
+      "kind": "decision",
+      "title": "確定できる？",
+      "sub": [
+        "5 秒安定・切替・停止"
+      ],
+      "c": "core"
+    },
+    {
+      "id": "compare",
+      "x": 700,
+      "y": 900,
+      "title": "保存済みの内容と比較",
+      "sub": [
+        "新規・追記・重複・スクロール"
+      ],
+      "icon": "tb:TbFilterCheck",
+      "c": "core"
+    },
+    {
+      "id": "save",
+      "x": 220,
+      "y": 1160,
+      "title": "新しい 1 枚を保存",
+      "sub": [
+        "PNG を追加",
+        "最も鮮明なフレーム"
+      ],
+      "icon": "tb:TbPhotoPlus",
+      "c": "files"
+    },
+    {
+      "id": "replace",
+      "x": 550,
+      "y": 1160,
+      "title": "既存の 1 枚を置換",
+      "sub": [
+        "追記 / 操作バー除去",
+        "前の版はごみ箱へ"
+      ],
+      "icon": "tb:TbRefresh",
+      "c": "files"
+    },
+    {
+      "id": "revisit",
+      "x": 880,
+      "y": 1160,
+      "title": "画像を増やさず記録",
+      "sub": [
+        "戻った時刻だけ残す",
+        "同じ状態の継続は何もしない"
+      ],
+      "icon": "tb:TbHistory",
+      "c": "files"
+    },
+    {
+      "id": "scroll",
+      "x": 1210,
+      "y": 1160,
+      "title": "必要な位置だけ保存",
+      "sub": [
+        "最初・最後・内容をカバーする位置"
+      ],
+      "icon": "tb:TbArrowsVertical",
+      "c": "files"
+    }
+  ],
+  "edges": [
+    {
+      "from": "frame",
+      "to": "blank",
+      "d": "M290 190H562",
+      "label": "解析画像",
+      "lx": 420,
+      "ly": 190
+    },
+    {
+      "from": "blank",
+      "to": "motion",
+      "d": "M838 190H1110",
+      "label": "いいえ",
+      "lx": 970,
+      "ly": 190
+    },
+    {
+      "from": "blank",
+      "to": "skip",
+      "d": "M700 245V342",
+      "label": "はい",
+      "lx": 775,
+      "ly": 300
+    },
+    {
+      "from": "skip",
+      "to": "frame",
+      "d": "M700 490H80V110H250V150",
+      "label": "次のフレーム",
+      "lx": 340,
+      "ly": 490,
+      "dashed": true
+    },
+    {
+      "from": "motion",
+      "to": "stable",
+      "d": "M1150 298V342",
+      "label": "本体を比較",
+      "lx": 1280,
+      "ly": 315
+    },
+    {
+      "from": "stable",
+      "to": "frame",
+      "d": "M1288 405H1395V110H250V150",
+      "label": "いいえ / 次のフレーム",
+      "lx": 960,
+      "ly": 110,
+      "dashed": true
+    },
+    {
+      "from": "stable",
+      "to": "pending",
+      "d": "M1150 460V522",
+      "label": "はい",
+      "lx": 1280,
+      "ly": 495
+    },
+    {
+      "from": "pending",
+      "to": "ready",
+      "d": "M1150 670V732",
+      "label": "一瞬で戻る状態を除外",
+      "lx": 1255,
+      "ly": 700
+    },
+    {
+      "from": "ready",
+      "to": "pending",
+      "d": "M1012 795H950V562H1110",
+      "label": "いいえ / 待つ",
+      "lx": 950,
+      "ly": 680,
+      "dashed": true
+    },
+    {
+      "from": "ready",
+      "to": "compare",
+      "d": "M1150 850V932H740",
+      "label": "はい",
+      "lx": 1020,
+      "ly": 932
+    },
+    {
+      "from": "compare",
+      "to": "save",
+      "d": "M700 1045V1100H220V1152",
+      "label": "新規",
+      "lx": 220,
+      "ly": 1130
+    },
+    {
+      "from": "compare",
+      "to": "replace",
+      "d": "M550 1100V1152",
+      "label": "追記など",
+      "lx": 550,
+      "ly": 1130
+    },
+    {
+      "from": "compare",
+      "to": "revisit",
+      "d": "M700 1100H880V1152",
+      "label": "同じ状態",
+      "lx": 880,
+      "ly": 1130
+    },
+    {
+      "from": "compare",
+      "to": "scroll",
+      "d": "M880 1100H1210V1152",
+      "label": "スクロール",
+      "lx": 1210,
+      "ly": 1130
+    }
+  ],
+  "notes": [
+    {
+      "x": 40,
+      "y": 1360,
+      "text": "簡略図。最近動いた領域だけの違いは、15 秒後または次の切替で確定。詳細は SPEC.md「判定」。"
+    }
+  ]
+}

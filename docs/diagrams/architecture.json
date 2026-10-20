@@ -1,0 +1,354 @@
+{
+  "nodes": [
+    {
+      "id": "zoom",
+      "x": 160,
+      "y": 215,
+      "title": "Zoom",
+      "sub": [
+        "ライブ授業の窓"
+      ],
+      "icon": "si:SiZoom",
+      "c": "capture"
+    },
+    {
+      "id": "browser",
+      "x": 160,
+      "y": 420,
+      "title": "ブラウザ再生",
+      "sub": [
+        "SharePoint など"
+      ],
+      "icon": "tb:TbBrowser",
+      "c": "capture"
+    },
+    {
+      "id": "video",
+      "x": 160,
+      "y": 645,
+      "title": "動画ファイル",
+      "sub": [
+        "mp4 / mov / m4v"
+      ],
+      "icon": "tb:TbVideo",
+      "c": "capture"
+    },
+    {
+      "id": "react",
+      "x": 555,
+      "y": 235,
+      "title": "React / TypeScript",
+      "sub": [
+        "履歴・範囲・パネル・設定"
+      ],
+      "icon": "si:SiReact",
+      "c": "ui"
+    },
+    {
+      "id": "tauri",
+      "x": 955,
+      "y": 235,
+      "title": "Tauri コマンド",
+      "sub": [
+        "開始・停止・設定・状態"
+      ],
+      "icon": "si:SiTauri",
+      "c": "host"
+    },
+    {
+      "id": "os",
+      "x": 1230,
+      "y": 235,
+      "title": "OS 連携",
+      "sub": [
+        "トレイ・通知・ショートカット"
+      ],
+      "icon": "tb:TbDeviceDesktop",
+      "c": "host"
+    },
+    {
+      "id": "xcap",
+      "x": 480,
+      "y": 505,
+      "title": "xcap",
+      "sub": [
+        "窓の取得・範囲切り出し"
+      ],
+      "icon": "tb:TbCapture",
+      "c": "capture"
+    },
+    {
+      "id": "ffmpeg",
+      "x": 480,
+      "y": 655,
+      "title": "FFmpeg",
+      "sub": [
+        "ファイルのフレーム取得"
+      ],
+      "icon": "si:SiFfmpeg",
+      "c": "capture"
+    },
+    {
+      "id": "engine",
+      "x": 855,
+      "y": 505,
+      "title": "記録エンジン",
+      "sub": [
+        "zsp-session"
+      ],
+      "icon": "tb:TbCpu",
+      "c": "core"
+    },
+    {
+      "id": "detect",
+      "x": 855,
+      "y": 675,
+      "title": "スライド判定",
+      "sub": [
+        "zsp-detect / I/O なし"
+      ],
+      "icon": "tb:TbFilterCheck",
+      "c": "core"
+    },
+    {
+      "id": "writer",
+      "x": 1250,
+      "y": 505,
+      "title": "保存・置換",
+      "sub": [
+        "PNG・JSON / 停止時に PDF"
+      ],
+      "icon": "tb:TbFiles",
+      "c": "files"
+    },
+    {
+      "id": "png",
+      "x": 920,
+      "y": 953,
+      "title": "PNG",
+      "sub": [],
+      "icon": "tb:TbPhoto",
+      "c": "files"
+    },
+    {
+      "id": "json",
+      "x": 1100,
+      "y": 953,
+      "title": "session.json",
+      "sub": [],
+      "icon": "tb:TbFileCode",
+      "c": "files"
+    },
+    {
+      "id": "pdf",
+      "x": 1280,
+      "y": 953,
+      "title": "slides.pdf",
+      "sub": [],
+      "icon": "tb:TbFileTypePdf",
+      "c": "files"
+    },
+    {
+      "id": "github",
+      "x": 160,
+      "y": 947,
+      "title": "GitHub Releases",
+      "sub": [
+        "新版の確認・署名付き更新"
+      ],
+      "icon": "si:SiGithub",
+      "c": "host"
+    }
+  ],
+  "groups": [
+    {
+      "id": "inputs",
+      "x": 40,
+      "y": 125,
+      "w": 240,
+      "h": 715,
+      "title": "入力元",
+      "c": "capture"
+    },
+    {
+      "id": "app",
+      "x": 340,
+      "y": 125,
+      "w": 1060,
+      "h": 715,
+      "title": "ZoomSlidesPicker / 手元の PC",
+      "c": "host"
+    },
+    {
+      "id": "ui",
+      "x": 370,
+      "y": 180,
+      "w": 390,
+      "h": 205,
+      "title": "WebView",
+      "c": "ui"
+    },
+    {
+      "id": "shell",
+      "x": 800,
+      "y": 180,
+      "w": 570,
+      "h": 205,
+      "title": "ネイティブ層 / Rust",
+      "c": "host"
+    },
+    {
+      "id": "capture",
+      "x": 370,
+      "y": 455,
+      "w": 220,
+      "h": 355,
+      "title": "zsp-capture",
+      "c": "capture"
+    },
+    {
+      "id": "session",
+      "x": 640,
+      "y": 455,
+      "w": 440,
+      "h": 355,
+      "title": "ワーカースレッド",
+      "c": "core"
+    },
+    {
+      "id": "output",
+      "x": 1130,
+      "y": 455,
+      "w": 240,
+      "h": 355,
+      "title": "zsp-output",
+      "c": "files"
+    },
+    {
+      "id": "storage",
+      "x": 800,
+      "y": 910,
+      "w": 600,
+      "h": 165,
+      "title": "保存先フォルダ / 端末内",
+      "c": "files"
+    }
+  ],
+  "edges": [
+    {
+      "from": "zoom",
+      "to": "xcap",
+      "d": "M200 247H315V537H440",
+      "label": "窓の ID",
+      "lx": 315,
+      "ly": 350
+    },
+    {
+      "from": "browser",
+      "to": "xcap",
+      "d": "M200 452H315",
+      "label": "",
+      "lx": 0,
+      "ly": 0
+    },
+    {
+      "from": "video",
+      "to": "ffmpeg",
+      "d": "M200 677H315V687H440",
+      "label": "ファイル",
+      "lx": 320,
+      "ly": 690
+    },
+    {
+      "from": "react",
+      "to": "tauri",
+      "d": "M595 267H915",
+      "label": "invoke() / events",
+      "lx": 755,
+      "ly": 267,
+      "dashed": true,
+      "both": true
+    },
+    {
+      "from": "tauri",
+      "to": "os",
+      "d": "M995 267H1190",
+      "label": "OS API",
+      "lx": 1095,
+      "ly": 267,
+      "both": true
+    },
+    {
+      "from": "tauri",
+      "to": "engine",
+      "d": "M955 372V420H855V497",
+      "label": "操作 / 状態",
+      "lx": 940,
+      "ly": 420,
+      "dashed": true,
+      "both": true
+    },
+    {
+      "from": "xcap",
+      "to": "engine",
+      "d": "M520 537H815",
+      "label": "フレーム",
+      "lx": 675,
+      "ly": 537
+    },
+    {
+      "from": "ffmpeg",
+      "to": "engine",
+      "d": "M520 687H615V562H815",
+      "label": "フレーム",
+      "lx": 690,
+      "ly": 562
+    },
+    {
+      "from": "engine",
+      "to": "detect",
+      "d": "M855 628V667",
+      "label": "解析・判定",
+      "lx": 960,
+      "ly": 648,
+      "both": true
+    },
+    {
+      "from": "engine",
+      "to": "writer",
+      "d": "M895 537H1210",
+      "label": "保存 / 置換",
+      "lx": 1098,
+      "ly": 537
+    },
+    {
+      "from": "writer",
+      "to": "storage",
+      "d": "M1250 630V865H1100V903",
+      "label": "ファイル出力",
+      "lx": 1250,
+      "ly": 865
+    },
+    {
+      "from": "tauri",
+      "to": "github",
+      "d": "M1000 372H1418V855H1258Q1250 839 1242 855H420V978H200",
+      "label": "HTTPS / 更新だけ",
+      "lx": 590,
+      "ly": 855,
+      "dashed": true,
+      "both": true
+    }
+  ],
+  "title": "システム構成",
+  "width": 1440,
+  "height": 1140,
+  "caption": "窓 / 動画 → フレーム取得 → 判定 → ローカル保存。操作と状態は Tauri IPC。",
+  "notes": [
+    {
+      "x": 40,
+      "y": 1120,
+      "text": "実線: フレーム・保存 / OS 連携　破線: 操作・状態 / 更新通信　番号は経路の参照用"
+    }
+  ]
+}

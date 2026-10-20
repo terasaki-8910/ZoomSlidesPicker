@@ -1,0 +1,281 @@
+{
+  "nodes": [
+    {
+      "id": "vite",
+      "x": 170,
+      "y": 210,
+      "title": "Vite 7",
+      "sub": [
+        "開発サーバー・Web ビルド"
+      ],
+      "icon": "si:SiVite",
+      "c": "tools"
+    },
+    {
+      "id": "pnpm",
+      "x": 170,
+      "y": 510,
+      "title": "pnpm 11",
+      "sub": [
+        "依存関係と scripts"
+      ],
+      "icon": "si:SiPnpm",
+      "c": "tools"
+    },
+    {
+      "id": "react",
+      "x": 540,
+      "y": 210,
+      "title": "React 19",
+      "sub": [
+        "UI・画面の状態"
+      ],
+      "icon": "si:SiReact",
+      "c": "ui"
+    },
+    {
+      "id": "ts",
+      "x": 820,
+      "y": 210,
+      "title": "TypeScript 5",
+      "sub": [
+        "型付き IPC・画面の型"
+      ],
+      "icon": "si:SiTypescript",
+      "c": "ui"
+    },
+    {
+      "id": "tauri",
+      "x": 540,
+      "y": 500,
+      "title": "Tauri v2",
+      "sub": [
+        "ウィンドウ・OS 連携"
+      ],
+      "icon": "si:SiTauri",
+      "c": "host"
+    },
+    {
+      "id": "rust",
+      "x": 820,
+      "y": 500,
+      "title": "Rust / 2024",
+      "sub": [
+        "記録・判定・保存"
+      ],
+      "icon": "si:SiRust",
+      "c": "core"
+    },
+    {
+      "id": "xcap",
+      "x": 490,
+      "y": 820,
+      "title": "xcap 0.9.8",
+      "sub": [
+        "窓キャプチャ"
+      ],
+      "icon": "tb:TbCapture",
+      "c": "capture"
+    },
+    {
+      "id": "ffmpeg",
+      "x": 680,
+      "y": 820,
+      "title": "FFmpeg",
+      "sub": [
+        "外部コマンド・任意導入"
+      ],
+      "icon": "si:SiFfmpeg",
+      "c": "capture"
+    },
+    {
+      "id": "pdf",
+      "x": 870,
+      "y": 820,
+      "title": "image / pdf-writer",
+      "sub": [
+        "PNG・PDF を生成"
+      ],
+      "icon": "tb:TbFileTypePdf",
+      "c": "files"
+    },
+    {
+      "id": "vitest",
+      "x": 1225,
+      "y": 210,
+      "title": "Vitest / ESLint",
+      "sub": [
+        "UI のテスト・静的検査"
+      ],
+      "icon": "si:SiVitest",
+      "c": "tools"
+    },
+    {
+      "id": "playwright",
+      "x": 1225,
+      "y": 410,
+      "title": "Playwright / axe",
+      "sub": [
+        "描画・操作・a11y"
+      ],
+      "icon": "tb:TbBrowserCheck",
+      "c": "tools"
+    },
+    {
+      "id": "cargo",
+      "x": 1225,
+      "y": 610,
+      "title": "Cargo",
+      "sub": [
+        "test / fmt / Clippy"
+      ],
+      "icon": "si:SiRust",
+      "c": "tools"
+    }
+  ],
+  "groups": [
+    {
+      "id": "build",
+      "x": 40,
+      "y": 125,
+      "w": 260,
+      "h": 600,
+      "title": "開発 / ビルド",
+      "c": "tools"
+    },
+    {
+      "id": "web",
+      "x": 380,
+      "y": 125,
+      "w": 600,
+      "h": 220,
+      "title": "WebView / src",
+      "c": "ui"
+    },
+    {
+      "id": "native",
+      "x": 380,
+      "y": 440,
+      "w": 600,
+      "h": 220,
+      "title": "ネイティブ",
+      "c": "core"
+    },
+    {
+      "id": "io",
+      "x": 380,
+      "y": 755,
+      "w": 600,
+      "h": 220,
+      "title": "入出力",
+      "c": "capture"
+    },
+    {
+      "id": "tests",
+      "x": 1050,
+      "y": 125,
+      "w": 350,
+      "h": 650,
+      "title": "検証",
+      "c": "tools"
+    }
+  ],
+  "edges": [
+    {
+      "from": "pnpm",
+      "to": "vite",
+      "d": "M170 502V350",
+      "label": "scripts",
+      "lx": 170,
+      "ly": 425
+    },
+    {
+      "from": "vite",
+      "to": "web",
+      "d": "M210 242H372",
+      "label": "dev / build",
+      "lx": 306,
+      "ly": 242
+    },
+    {
+      "from": "react",
+      "to": "tauri",
+      "d": "M540 345V492",
+      "label": "WebView / IPC",
+      "lx": 540,
+      "ly": 390,
+      "both": true
+    },
+    {
+      "from": "tauri",
+      "to": "rust",
+      "d": "M580 532H780",
+      "label": "commands",
+      "lx": 680,
+      "ly": 532,
+      "both": true
+    },
+    {
+      "from": "rust",
+      "to": "xcap",
+      "d": "M820 660V710H490V812",
+      "label": "",
+      "lx": 0,
+      "ly": 0
+    },
+    {
+      "from": "rust",
+      "to": "ffmpeg",
+      "d": "M680 710V812",
+      "label": "利用",
+      "lx": 680,
+      "ly": 710
+    },
+    {
+      "from": "rust",
+      "to": "pdf",
+      "d": "M820 710H870V812",
+      "label": "",
+      "lx": 0,
+      "ly": 0
+    },
+    {
+      "from": "vitest",
+      "to": "web",
+      "d": "M1185 242H987",
+      "label": "UI テスト",
+      "lx": 1070,
+      "ly": 242,
+      "dashed": true
+    },
+    {
+      "from": "playwright",
+      "to": "web",
+      "d": "M1185 442H1010V305H987",
+      "label": "E2E",
+      "lx": 1010,
+      "ly": 390,
+      "dashed": true
+    },
+    {
+      "from": "cargo",
+      "to": "native",
+      "d": "M1185 642H987",
+      "label": "Rust 検査",
+      "lx": 1070,
+      "ly": 642,
+      "dashed": true
+    }
+  ],
+  "title": "技術スタックと依存関係",
+  "width": 1440,
+  "height": 1040,
+  "caption": "ビルド・実行・テストの依存関係。技術名の下に、その役割を記載。",
+  "notes": [
+    {
+      "x": 40,
+      "y": 1020,
+      "text": "実線: 実行・利用関係　破線: 検証対象　FFmpeg / ffprobe は別途導入（同梱しない）"
+    }
+  ]
+}

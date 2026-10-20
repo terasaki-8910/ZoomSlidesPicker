@@ -63,13 +63,13 @@ python3 -m venv .venv && .venv/bin/pip install numpy pillow
 
 ## README の画像を作り直す
 
-実際の React 画面と既存 IPC モックを Playwright で動かす。実際の授業・アカウント・保存ファイルには触れない。図は `docs/diagrams/` の HTML/CSS と、依存関係に含まれる React Icons から生成する。色は本体の `src/styles/tokens.css` を参照する。
+実際の React 画面と既存 IPC モックを Playwright で動かす。実際の授業・アカウント・保存ファイルには触れない。図は `docs/diagrams/*.json` のノード・境界・接続定義と、依存関係に含まれる React Icons の SVG を組み合わせる。色は図専用の `docs/diagrams/tokens.json` で定義し、本体のデザイントークンは変更しない。
 
 ```sh
 pnpm exec playwright install chromium
 node scripts/readme-assets.mjs               # スクショ・操作 GIF・図のすべて
 node scripts/readme-assets.mjs screenshots   # スクショと GIF（ffmpeg が必要）
-node scripts/readme-assets.mjs diagrams      # アイコン付きの図
+node scripts/readme-assets.mjs diagrams      # JSON から SVG と互換用 PNG を描画・検証
 ```
 
-Chromium が別の場所にある場合は `CHROMIUM_PATH` に実行ファイルのパスを指定する。スクショは既存 IPC モックの固定サンプルで、検出エンジンや OS 権限の実機検証を置き換えるものではない。出力は `docs/images/`（ライト / ダーク）。
+Chromium が別の場所にある場合は `CHROMIUM_PATH` に実行ファイルのパスを指定する。スクショは既存 IPC モックの固定サンプルで、検出エンジンや OS 権限の実機検証を置き換えるものではない。出力は `docs/images/`（ライト / ダーク）。README は拡大しても文字と線が鮮明な SVG を参照する。描画時にアイコン・接続先の存在、文字のはみ出しと重なりを確認する。単独の図の再生成も `node scripts/readme-diagrams.mjs` で行える。
