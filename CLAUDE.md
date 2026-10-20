@@ -15,6 +15,10 @@ subagents, each in its own git worktree under `.worktrees/`, then reviewed (read
 the checks) and merged with `git merge --no-ff`. Implementation subagents run on Sonnet;
 design, acceptance criteria, and review stay with the main session.
 
+Until 2026-11-20 (Codex trial): the implementation in those worktrees goes to Codex CLI through
+the `codex-delegate` skill instead of Sonnet subagents, while Codex quota allows. The main
+session creates the worktree, writes the spec, reviews, commits, and merges.
+
 ## Language
 - SPEC.md, ACCEPTANCE.md, DECISIONS.md, PLAN.md, design_brief.md, README.md: Japanese
   (DECISIONS R1-11).
