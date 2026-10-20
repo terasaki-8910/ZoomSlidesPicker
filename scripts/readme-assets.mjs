@@ -1,17 +1,14 @@
 // Capture the real React views with the existing, invented IPC mock; render the
-// README diagrams from editable HTML and installed React Icons. No lecture data.
+// README diagrams from editable JSON/SVG and installed React Icons. No lecture data.
 // Run: node scripts/readme-assets.mjs [screenshots|diagrams]
 /* global document, innerWidth */
 import { spawn, execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { chromium, expect } from "@playwright/test";
-import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import * as si from "react-icons/si";
-import * as tb from "react-icons/tb";
+import { renderDiagrams } from "./readme-diagrams.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const out = join(root, "docs/images");
@@ -32,30 +29,6 @@ async function assertFits(page) {
       if (!image.naturalWidth) throw new Error(`Image failed: ${image.src}`);
     }));
   });
-}
-
-async function renderDiagrams() {
-  const icons = { si, tb };
-  for (const name of ["architecture", "detection-flow", "stack"]) {
-    for (const theme of ["light", "dark"]) {
-      const page = await browser.newPage({ viewport: { width: 1160, height: 1600 }, deviceScaleFactor: 2, colorScheme: theme });
-      await page.goto(pathToFileURL(join(root, `docs/diagrams/${name}.html`)).href);
-      for (const node of await page.locator("[data-icon]").all()) {
-        const key = await node.getAttribute("data-icon");
-        const [set, symbol] = key.split(":");
-        if (!icons[set]?.[symbol]) throw new Error(`Unknown icon: ${key}`);
-        const svg = renderToStaticMarkup(React.createElement(icons[set][symbol], { "aria-hidden": true }));
-        await node.evaluate((element, markup) => { element.innerHTML = markup; }, svg);
-      }
-      await assertFits(page);
-      const clipped = await page.locator(".node, .stack-item, .decision, .answer").evaluateAll((nodes) =>
-        nodes.filter((node) => node.scrollWidth > node.clientWidth + 1).map((node) => node.textContent));
-      if (clipped.length) throw new Error(`Clipped diagram content: ${clipped}`);
-      await page.locator("#canvas").screenshot({ path: join(out, `diagram-${name}-${theme}.png`) });
-      await page.close();
-      console.log(`diagram ${name} ${theme}: ok`);
-    }
-  }
 }
 
 async function startMock() {
@@ -172,7 +145,7 @@ async function screenshots() {
 }
 
 try {
-  if (!selected.length || selected.includes("diagrams")) await renderDiagrams();
+  if (!selected.length || selected.includes("diagrams")) await renderDiagrams({ browser, root });
   if (!selected.length || selected.includes("screenshots")) await screenshots();
 } finally {
   await browser.close();

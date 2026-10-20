@@ -76,8 +76,8 @@ Zoom のライブ授業や SharePoint の録画再生など、選んだ窓のス
 ## アーキテクチャ
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagram-architecture-dark.png">
-  <img src="docs/images/diagram-architecture-light.png" alt="React から Tauri の型付き IPC を通して Rust の記録エンジンを操作し、窓または動画から検出・保存する構成図">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagram-architecture-dark.svg">
+  <img src="docs/images/diagram-architecture-light.svg" alt="React から Tauri の型付き IPC を通して Rust の記録エンジンを操作し、窓または動画から検出・保存する構成図">
 </picture>
 
 - **判定を純粋な Rust crate にした。** `zsp-detect` は OS・I/O・UI に依存しない。同じ入力を再生して回帰を確かめられ、ライブの窓と動画ファイルで同じ判定を使える。
@@ -89,8 +89,8 @@ Zoom のライブ授業や SharePoint の録画再生など、選んだ窓のス
 ## 判定の流れ
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagram-detection-flow-dark.png">
-  <img src="docs/images/diagram-detection-flow-light.png" alt="フレーム解析、単色と動く領域の除外、安定待ち、保存・置換・再訪・スクロールの判定フローチャート">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagram-detection-flow-dark.svg">
+  <img src="docs/images/diagram-detection-flow-light.svg" alt="フレーム解析、単色と動く領域の除外、安定待ち、保存・置換・再訪・スクロールの判定フローチャート">
 </picture>
 
 単純な画像差分だけだと、カメラの動きやプレーヤーの操作バーまで別スライドになる。そこで「どこが動き続けるか」「文字や線が増えただけか」「以前の状態と同じか」を分けて判定する。解析は輝度を使うため、**明るさが同じで色だけが変わる変化は検出しない**。再現できる規則で処理し、不得意な変化も明示している。
@@ -100,8 +100,8 @@ Zoom のライブ授業や SharePoint の録画再生など、選んだ窓のス
 ## 技術スタック
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagram-stack-dark.png">
-  <img src="docs/images/diagram-stack-light.png" alt="React、TypeScript、Vite、Tauri、Rust、xcap、FFmpeg、pdf-writer と Cargo・Vitest・Playwright の技術スタック図">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagram-stack-dark.svg">
+  <img src="docs/images/diagram-stack-light.svg" alt="React、TypeScript、Vite、Tauri、Rust、xcap、FFmpeg、pdf-writer と Cargo・Vitest・Playwright の技術スタック図">
 </picture>
 
 ## 使い方
@@ -201,7 +201,7 @@ macOS の実機では、窓全体を他の窓で覆った状態で対象だけ�
 | [`crates/zsp-output/`](crates/zsp-output) | PNG・JSON・PDF・ごみ箱 |
 | [`fixtures/`](fixtures) / [`samples/`](samples) | 合成の授業画面、参照実装、検証スクリプト |
 | [`tests/ui/`](tests/ui) | Playwright と axe の画面検証 |
-| [`docs/diagrams/`](docs/diagrams) / [`docs/images/`](docs/images) | README 図の HTML/CSS と画像。再生成: `node scripts/readme-assets.mjs` |
+| [`docs/diagrams/`](docs/diagrams) / [`docs/images/`](docs/images) | README 図の JSON・SVG と PNG。再生成: `node scripts/readme-assets.mjs` |
 
 検証用の環境変数、再生・fixture 生成、画像の再生成は [開発手順](docs/DEVELOPMENT.md)。仕様は [SPEC.md](SPEC.md)、合格条件は [ACCEPTANCE.md](ACCEPTANCE.md)、判断の理由と過去の検証は [DECISIONS.md](DECISIONS.md)。
 
@@ -218,4 +218,4 @@ macOS の実機では、窓全体を他の窓で覆った状態で対象だけ�
 
 本リポジトリにはオープンソースライセンスを設定していない（Cargo の設定は `UNLICENSED`）。
 
-UI と図版のアイコンは [React Icons](https://github.com/react-icons/react-icons) を通して利用。図版は [Simple Icons（CC0）](https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md) と [Tabler Icons（MIT）](https://github.com/tabler/tabler-icons/blob/main/LICENSE)。各ロゴは対応する技術を示すために使用している。
+UI と図版のアイコンは [React Icons](https://github.com/react-icons/react-icons) を通して利用。図版は [Simple Icons（CC0）](https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md) と [Tabler Icons（MIT）](https://github.com/tabler/tabler-icons/blob/main/LICENSE)。各ロゴは対応する技術を示すために使用している。図は既存の SVG アイコンと接続線をコードで配置し、画像生成 AI は使用していない。
