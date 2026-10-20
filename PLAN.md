@@ -76,5 +76,5 @@
 - 図の ID・接続先・アイコン、文字のはみ出し、文字同士とアイコンの重なりを描画時に検査。全図を目視し、相対リンク、ビットマップ埋め込み・スクリプトなしも確認した。
 - ブランチの `pnpm lint`、`pnpm test`（90 件）、`pnpm build`、`node scripts/readme-assets.mjs diagrams` が合格。本体コードが一致する main の `sh scripts/check.sh` も合格（Playwright / axe 49 件を含む）。
 - ユーザーがこの B 案での続行・統合・公開を承認。再利用用プロンプトを `.claude/diagram-prompt.md` に追加した。実装調査、図の文法、SVG とソースの出力、再生成・目視・機械検査の条件を含む。
-- 状態: 完成版とプロンプトを統合・公開する。別セッションの `.worktrees/readme-diagrams` のファイルには触れない。統合後に一式のチェック・ビルドと公開内容の一致を確認する。
+- 状態: 完成版とプロンプトを `b1521cb` で main に統合済み。統合後の `sh scripts/check.sh`（フロントエンド 90 件、Playwright / axe 49 件を含む）、`pnpm build` が合格。6 SVG と互換用 PNG の再生成は差分なし。README・開発手順・プロンプトの相対参照と、SVG に埋め込みビットマップ・スクリプトがないことも確認した。別セッションの `.worktrees/readme-diagrams` には触れていない。GitHub への反映は今回のユーザー承認の範囲で行う。
 - 完成見本: 確認シート http://127.0.0.1:4398/ の先頭。R6 の回答ファイルはローカルの `state/decision-sheet/round6.json` に保持し、リポジトリには入れない。
